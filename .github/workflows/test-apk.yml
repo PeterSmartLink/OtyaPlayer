@@ -106,32 +106,9 @@ jobs:
           set -euo pipefail
           test -n "$FIREBASE_API_KEY" || { echo "ERROR: FIREBASE_API_KEY is missing"; exit 1; }
 
-      - name: Prepare signing key
-        id: signing
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -n "${KEYSTORE_BASE64:-}" ] && [ -n "${STORE_PASSWORD:-}" ] && [ -n "${KEY_ALIAS:-}" ] && [ -n "${KEY_PASSWORD:-}" ]; then
-            printf '%s' "$KEYSTORE_BASE64" | base64 -d > android/app/keystore.jks
-            test -s android/app/keystore.jks || { echo "ERROR: signing key is empty"; exit 1; }
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "WARNING: release signing is not available for this test build"
-          fi
-
       - name: Build test APK
         env:
           FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
-          KEYSTORE_PATH: ${{ steps.signing.outputs.available == 'true' && format('{0}/android/app/keystore.jks', github.workspace) || '' }}
-          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         shell: bash
         run: |
           set -euo pipefail
@@ -167,7 +144,3 @@ jobs:
             build/Otya-test.apk
             build/Otya-test-checksum.txt
             build/Otya-test-signing.txt
-
-      - name: Remove signing key
-        if: always()
-        run: rm -f android/app/keystore.jks

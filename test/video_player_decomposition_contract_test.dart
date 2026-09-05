@@ -14,9 +14,16 @@ void main() {
     expect(screen, contains('Player? _player;'));
     expect(screen, contains('void _attachPlayer(Player player)'));
     expect(screen, contains('MediaKitEngine('));
+
+    // The lifecycle owner snapshots the current player before teardown so
+    // Together can detach from that exact instance before the playback
+    // coordinator releases it. Keep the ownership contract semantic rather
+    // than coupling this test to the old `_player!` spelling.
+    expect(screen, contains('final player = _player;'));
+    expect(screen, contains('PlaybackCoordinator.instance.unregister(player)'));
     expect(
       screen,
-      contains('PlaybackCoordinator.instance.unregister(_player!)'),
+      contains('NearbyTogetherRuntime.instance.detachPlayer(player)'),
     );
 
     expect(overlays, isNot(contains('MediaKitEngine(')));

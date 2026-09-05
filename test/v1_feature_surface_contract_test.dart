@@ -1,4 +1,4 @@
-// OTYA v1 release contract: this file also triggers strict CI after source patches.
+// Otya v1 release contract: this file also triggers strict CI after source patches.
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -10,15 +10,17 @@ void main() {
     expect(router, contains("label: 'Video'"));
     expect(router, contains("label: 'Music'"));
     expect(router, contains("label: 'Me'"));
+    expect(router, isNot(contains("label: 'Next'")));
+    expect(router, isNot(contains("label: 'Together'")));
   });
 
-  test('Me exposes every required OTYA v1 hub action', () {
+  test('Me exposes every required Otya v1 hub action without consumer AI', () {
     final source = File(
       'lib/features/my_space/presentation/my_space_hub_screen.dart',
     ).readAsStringSync();
 
     for (final label in [
-      'Transfer',
+      'Send',
       'Files',
       'Private',
       'Convert video to audio',
@@ -43,9 +45,9 @@ void main() {
       expect(source, contains("'$route'"), reason: '$route must stay wired');
     }
 
-    expect(source, contains('_NextCard(onTap:'), reason: 'Me must keep a dedicated Next card');
-    expect(source, contains("context.push('/support')"), reason: 'The Next card must open Next');
-    expect(source, contains("Text('Next'"), reason: 'Next must stay visibly named in Me');
+    expect(source, isNot(contains('_NextCard(onTap:')));
+    expect(source, isNot(contains("context.push('/support')")));
+    expect(source, isNot(contains("Text('Next'")));
     expect(source, contains("title: 'Trim video'"), reason: 'Trim must stay reachable');
     expect(source, contains("title: 'Equalizer'"), reason: 'Equalizer must stay reachable');
   });
@@ -87,7 +89,7 @@ void main() {
     expect(service, contains('Refusing path outside Private storage'));
   });
 
-  test('Transfer keeps authenticated local-only streaming and safe resume', () {
+  test('Send keeps authenticated local-only streaming and safe resume', () {
     final receiver = File(
       'lib/features/transfer/data/media_receiver.dart',
     ).readAsStringSync();
@@ -163,19 +165,21 @@ void main() {
     expect(downloads, contains("context.push('/player/audio'"));
   });
 
-  test('Next remains a real conversational surface', () {
-    final source = File(
-      'lib/features/ai/otya_support_screen.dart',
+  test('consumer AI remains removed from public app routing', () {
+    final router = File('lib/app/router.dart').readAsStringSync();
+    final me = File(
+      'lib/features/my_space/presentation/my_space_hub_screen.dart',
     ).readAsStringSync();
-    expect(source, contains('Message Next'));
-    expect(source, contains('ScrollController'));
-    expect(source, contains('Choose Next model'));
-    expect(source, contains('New chat'));
-    expect(source, contains('Ask Otya Support'));
-    expect(
-      source,
-      contains('keep using your music, videos, files, Transfer and other local Otya features normally'),
-    );
+    final about = File(
+      'lib/features/settings/presentation/about_screen.dart',
+    ).readAsStringSync();
+
+    expect(router, isNot(contains('features/ai/otya_support_screen.dart')));
+    expect(router, contains("GoRoute(path: '/support', redirect: (_, __) => '/about')"));
+    expect(router, contains("GoRoute(path: '/ai', redirect: (_, __) => '/about')"));
+    expect(me, isNot(contains("context.push('/support')")));
+    expect(about, isNot(contains("context.push('/support')")));
+    expect(about, isNot(contains("label: 'Next'")));
   });
 
   test('Account keeps Google, password, consent, recovery and 2FA flows', () {

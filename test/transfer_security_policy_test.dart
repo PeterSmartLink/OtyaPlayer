@@ -35,6 +35,21 @@ void main() {
       );
     });
 
+    test('accepts the internal Together proxy only on IPv4 loopback', () {
+      expect(
+        isAllowedTransferUri(
+          Uri.parse('http://127.0.0.1:49152/together-stream?t=$token'),
+        ),
+        isTrue,
+      );
+      expect(
+        isAllowedTransferUri(
+          Uri.parse('http://192.168.1.20:49152/together-stream?t=$token'),
+        ),
+        isFalse,
+      );
+    });
+
     test('rejects malformed, ambiguous and non-local URLs', () {
       final rejected = <String>[
         'https://192.168.1.20:8080/media?t=$token',
@@ -45,6 +60,7 @@ void main() {
         'http://192.168.1.20/media?t=short',
         'http://192.168.1.20/media?t=$token&t=$token',
         'http://192.168.1.20/media?t=$token#fragment',
+        'http://127.0.0.1/together-stream?t=short',
       ];
 
       for (final value in rejected) {

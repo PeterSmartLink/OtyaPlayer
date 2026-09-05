@@ -9,7 +9,6 @@ import '../../../core/models/media_item.dart';
 import '../../../core/services/auth_provider.dart';
 import '../../../core/services/ffmpeg_service.dart';
 import '../../../core/services/remote_control_service.dart';
-import '../../../shared/widgets/otya_logo.dart';
 import '../../../shared/widgets/wallpaper_scaffold.dart';
 import '../../search/smart_search_sheet.dart';
 import 'providers/my_space_provider.dart';
@@ -36,9 +35,6 @@ class MySpaceHubScreen extends ConsumerWidget {
                 onProfile: () => context.push('/profile'),
               ),
             ),
-            SliverToBoxAdapter(
-              child: _NextCard(onTap: () => context.push('/support')),
-            ),
             const SliverToBoxAdapter(child: _SectionLabel('Quick actions')),
             SliverToBoxAdapter(
               child: Padding(
@@ -47,9 +43,9 @@ class MySpaceHubScreen extends ConsumerWidget {
                   children: [
                     Expanded(
                       child: _PrimaryAction(
-                        icon: Icons.swap_horiz_rounded,
-                        title: 'Transfer',
-                        subtitle: 'Send & receive',
+                        icon: Icons.send_rounded,
+                        title: 'Send',
+                        subtitle: 'Nearby sharing',
                         enabled: remote.featureEnabled('transfer', fallback: true),
                         onTap: () => context.push('/transfer'),
                       ),
@@ -135,7 +131,7 @@ class MySpaceHubScreen extends ConsumerWidget {
                 children: [
                   _ActionRow(
                     icon: Icons.account_circle_outlined,
-                    title: 'Otya Account',
+                    title: 'OTYA Account',
                     subtitle: 'Profile, sign-in, security and backup',
                     onTap: () => context.push('/profile'),
                   ),
@@ -149,7 +145,7 @@ class MySpaceHubScreen extends ConsumerWidget {
                 children: [
                   _ActionRow(
                     icon: Icons.info_outline_rounded,
-                    title: 'About Otya',
+                    title: 'About OTYA',
                     subtitle: 'Version, privacy, terms and product information',
                     onTap: () => context.push('/about'),
                   ),
@@ -173,7 +169,7 @@ class MySpaceHubScreen extends ConsumerWidget {
     await _showMediaActionSheet(
       context,
       title: 'Convert video to audio',
-      subtitle: 'Choose a video. Otya extracts its existing audio locally without uploading the file.',
+      subtitle: 'Choose a video. OTYA extracts its existing audio locally without uploading the file.',
       items: videos,
       actionIcon: Icons.music_note_rounded,
       actionLabel: 'Extract audio',
@@ -203,7 +199,7 @@ class MySpaceHubScreen extends ConsumerWidget {
             const Text('Media tools', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
             const SizedBox(height: 5),
             const Text(
-              'Work with media on this device. Otya will show progress and where the result is saved.',
+              'Work with media on this device. OTYA will show progress and where the result is saved.',
               style: TextStyle(color: AppColors.textSecondary, height: 1.4),
             ),
             const SizedBox(height: 14),
@@ -391,7 +387,7 @@ class MySpaceHubScreen extends ConsumerWidget {
                                         setState(() => result = output);
                                       } else {
                                         setState(() {
-                                          error = 'Otya could not process this file. The format or codec may not be supported by this tool yet. Try another file or open it in the player first.';
+                                          error = 'OTYA could not process this file. The format or codec may not be supported by this tool yet. Try another file or open it in the player first.';
                                         });
                                       }
                                     } catch (_) {
@@ -450,7 +446,7 @@ class _MeHeader extends StatelessWidget {
                 ),
                 const SizedBox(height: 7),
                 Text(
-                  name?.isNotEmpty == true ? 'Good to see you, $name' : 'Your media, tools and Otya account',
+                  name?.isNotEmpty == true ? 'Good to see you, $name' : 'Your media, tools and OTYA account',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
@@ -459,80 +455,20 @@ class _MeHeader extends StatelessWidget {
             ),
           ),
           IconButton.filledTonal(
-            tooltip: 'Search Otya',
+            tooltip: 'Search OTYA',
             onPressed: onSearch,
             icon: const Icon(Icons.search_rounded),
           ),
           const SizedBox(width: 8),
           Semantics(
             button: true,
-            label: 'Open Otya Account',
+            label: 'Open OTYA Account',
             child: GestureDetector(
               onTap: onProfile,
               child: _Avatar(photoUrl: photoUrl, name: displayName),
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _NextCard extends StatelessWidget {
-  const _NextCard({required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 22),
-      child: Material(
-        color: AppColors.cardOf(context).withValues(alpha: .9),
-        borderRadius: BorderRadius.circular(26),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () {
-            HapticFeedback.selectionClick();
-            onTap();
-          },
-          child: Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(26),
-              border: Border.all(color: AppColors.borderOf(context)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 58,
-                  height: 58,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: colors.surface,
-                    borderRadius: BorderRadius.circular(19),
-                  ),
-                  child: const OtyaAiMark(size: 40),
-                ),
-                const SizedBox(width: 15),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Next', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -.4)),
-                      SizedBox(height: 4),
-                      Text(
-                        'Ask a question or get help with Otya.',
-                        style: TextStyle(fontSize: 12.5, height: 1.35, color: AppColors.textSecondary),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.arrow_forward_rounded),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }

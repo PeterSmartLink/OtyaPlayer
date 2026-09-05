@@ -47,6 +47,55 @@ class MediaSender {
     await stop();
     await Future<void>.delayed(const Duration(milliseconds: 100));
 
+    final file = await _validatedMediaFile(filePath);
+    final ip = await _getLocalIp();
+    final token = _generateToken();
+    final server = await _bindServer();
+
+    _filePath = filePath;
+    _localIp = ip;
+    _token = token;
+    _server = server;
+
+    debugPrint('[MediaSender] Otya Transfer server ready on local network.');
+    server.listen(
+      _handleRequest,
+      onError: (Object e) => debugPrint('[MediaSender] Error: $e'),
+      cancelOnError: false,
+    );
+    return _buildMediaUrl(
+      file: file,
+      ip: ip,
+      port: server.port,
+      token: token,
+    );
+  }
+
+  /// Replaces the media behind an already-running local sender without
+  /// restarting the HTTP server. The new file is fully validated before any
+  /// active state changes, then the token rotates so stale URLs cannot request
+  /// the next media. Requests already streaming the previous file may finish.
+  Future<String> switchServing(String filePath) async {
+    final server = _server;
+    final ip = _localIp;
+    if (server == null || ip == null) {
+      throw StateError('Otya local media sender is not active.');
+    }
+
+    final file = await _validatedMediaFile(filePath);
+    final token = _generateToken();
+    _filePath = filePath;
+    _token = token;
+
+    return _buildMediaUrl(
+      file: file,
+      ip: ip,
+      port: server.port,
+      token: token,
+    );
+  }
+
+  Future<File> _validatedMediaFile(String filePath) async {
     final file = File(filePath);
     if (!await file.exists()) {
       throw FileSystemException('File not found', filePath);
@@ -55,26 +104,21 @@ class MediaSender {
     if (!_supportedExtensions.contains(extension)) {
       throw const FormatException('Otya Transfer only shares supported media files.');
     }
+    return file;
+  }
 
-    final ip = await _getLocalIp();
-    _filePath = filePath;
-    _localIp = ip;
-    _token = _generateToken();
-    _server = await _bindServer();
-
+  String _buildMediaUrl({
+    required File file,
+    required String ip,
+    required int port,
+    required String token,
+  }) {
     final name = Uri.encodeQueryComponent(
       file.uri.pathSegments.isNotEmpty
           ? file.uri.pathSegments.last
           : 'otya-transfer',
     );
-    final url = 'http://$ip:${_server!.port}/media?t=$_token&name=$name';
-    debugPrint('[MediaSender] Otya Transfer server ready on local network.');
-    _server!.listen(
-      _handleRequest,
-      onError: (Object e) => debugPrint('[MediaSender] Error: $e'),
-      cancelOnError: false,
-    );
-    return url;
+    return 'http://$ip:$port/media?t=$token&name=$name';
   }
 
   Future<HttpServer> _bindServer() async {

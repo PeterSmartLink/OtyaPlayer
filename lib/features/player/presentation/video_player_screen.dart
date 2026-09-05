@@ -9,6 +9,7 @@ import 'package:media_kit/media_kit.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../core/database/otya_database.dart';
 import '../../../core/models/media_item.dart';
+import '../../../core/services/auth_provider.dart';
 import '../../../core/services/ffmpeg_service.dart';
 import '../../../core/services/media_kit_engine.dart';
 import '../../../core/services/native_share_service.dart';
@@ -16,6 +17,12 @@ import '../../../core/services/pip_service.dart';
 import '../../../core/services/playback_coordinator.dart';
 import '../../../features/settings/settings_provider.dart';
 import '../../../shared/widgets/speed_picker_sheet.dart';
+import '../../together/application/nearby_together_runtime.dart';
+import '../../together/application/nearby_together_session.dart';
+import '../../together/presentation/nearby_together_host_sheet.dart';
+import '../../together/presentation/nearby_together_join_sheet.dart';
+import '../../together/presentation/nearby_together_live_surface.dart';
+import '../../transfer/data/transfer_security_policy.dart';
 import 'queue_screen.dart';
 import 'widgets/video_gesture_layer.dart';
 import 'widgets/video_player_overlays.dart';
@@ -35,6 +42,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
   bool _pipAutoEnabled = false;
   bool _pipInitialized = false;
   bool _handoffToAnotherVideo = false;
+  bool _togetherGuestStreamActive = false;
   late final Duration _savedPosition;
 
   bool _controlsVisible = true;
@@ -65,6 +73,11 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
     BoxFit.fill,
   ];
 
+  String get _visibleTitle =>
+      _togetherGuestStreamActive ? 'Together video' : widget.mediaItem.title;
+
+  bool get _persistLocalPosition => !_togetherGuestStreamActive;
+
   @override
   void initState() {
     super.initState();
@@ -73,9 +86,23 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
             Duration.zero;
     _position = _savedPosition;
     WidgetsBinding.instance.addObserver(this);
+    NearbyTogetherRuntime.instance.addListener(_handleTogetherRuntimeChanged);
     _initOrientationFromVideo();
     _initPip();
     _resetHideTimer();
+  }
+
+  void _handleTogetherRuntimeChanged() {
+    final runtime = NearbyTogetherRuntime.instance;
+    if (!mounted || !runtime.guestStreaming || _togetherGuestStreamActive) {
+      return;
+    }
+    setState(() {
+      _togetherGuestStreamActive = true;
+      _ccEnabled = false;
+      _position = Duration.zero;
+      _duration = runtime.guestPlan?.remoteMedia.duration ?? Duration.zero;
+    });
   }
 
   Future<void> _initPip() async {
@@ -87,7 +114,9 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused && _position > Duration.zero) {
+    if (state == AppLifecycleState.paused &&
+        _persistLocalPosition &&
+        _position > Duration.zero) {
       OtyaDatabase.instance.saveSeekPosition(widget.mediaItem.id, _position);
     }
     if (!_pipInitialized) return;
@@ -147,12 +176,50 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   }
 
-  void _openQueuedVideo(MediaItem item) {
-    if (_position > Duration.zero) {
+  Future<bool> _openQueuedVideo(MediaItem item) async {
+    final runtime = NearbyTogetherRuntime.instance;
+    if (runtime.active && runtime.isGuest) {
+      _showHostControlsQueueMessage();
+      return false;
+    }
+
+    if (_persistLocalPosition && _position > Duration.zero) {
       OtyaDatabase.instance.saveSeekPosition(widget.mediaItem.id, _position);
     }
+
+    if (runtime.active && runtime.isHost) {
+      try {
+        await runtime.prepareHostNextMedia(item);
+      } catch (_) {
+        await _player?.play();
+        if (!mounted) return false;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              runtime.lastError ??
+                  'Otya could not change the Together video. Try again.',
+            ),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return false;
+      }
+    }
+
+    if (!mounted) return false;
     _handoffToAnotherVideo = true;
     context.pushReplacement('/player/video', extra: item);
+    return true;
+  }
+
+  void _showHostControlsQueueMessage() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('The host chooses the shared video while Together is active.'),
+        backgroundColor: AppColors.surface,
+      ),
+    );
   }
 
   String get size {
@@ -209,6 +276,200 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
     }
   }
 
+  Future<void> _showTogetherEntry() async {
+    final player = _player;
+    if (player == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('The video is still getting ready. Try again in a moment.'),
+          backgroundColor: AppColors.surface,
+        ),
+      );
+      return;
+    }
+
+    final runtime = NearbyTogetherRuntime.instance;
+    if (runtime.active) {
+      await _showActiveTogetherRoom();
+      return;
+    }
+
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: AppColors.surface.withValues(alpha: .98),
+      barrierColor: Colors.black.withValues(alpha: .42),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 42,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.border,
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            const SizedBox(height: 18),
+            const Text(
+              'Watch Together',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 21,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 5),
+            const Text(
+              'Use the same Wi-Fi or hotspot. OTYA chooses whether to sync your copies or stream directly between the phones.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12.5,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              tileColor: AppColors.accent.withValues(alpha: .08),
+              leading: const CircleAvatar(
+                backgroundColor: Color(0x1A22D3EE),
+                child: Icon(Icons.play_circle_outline_rounded, color: AppColors.accent),
+              ),
+              title: const Text('Start with this video', style: TextStyle(fontWeight: FontWeight.w800)),
+              subtitle: const Text('Show a private QR invite to the other phone.'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => Navigator.pop(sheetContext, 'start'),
+            ),
+            const SizedBox(height: 10),
+            ListTile(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              tileColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .55),
+              leading: const CircleAvatar(
+                child: Icon(Icons.qr_code_scanner_rounded),
+              ),
+              title: const Text('Join a friend', style: TextStyle(fontWeight: FontWeight.w800)),
+              subtitle: const Text('Scan the Together QR shown on their OTYA.'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => Navigator.pop(sheetContext, 'join'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (!mounted || choice == null) return;
+    if (choice == 'start') {
+      await showNearbyTogetherHostSheet(
+        context: context,
+        mediaItem: widget.mediaItem,
+        player: player,
+        displayName: ref.read(displayNameProvider),
+      );
+      return;
+    }
+
+    final plan = await showNearbyTogetherJoinSheet(
+      context: context,
+      currentMediaItem: widget.mediaItem,
+      player: player,
+      displayName: ref.read(displayNameProvider),
+    );
+    if (!mounted || plan == null) return;
+    if (plan.kind == NearbyPlaybackSourceKind.hostLanStream) {
+      await _switchToTogetherStream(plan);
+    } else {
+      await _showActiveTogetherRoom();
+    }
+  }
+
+  Future<void> _switchToTogetherStream(NearbyPlaybackPlan plan) async {
+    final player = _player;
+    final uri = plan.hostMediaUrl;
+    final runtime = NearbyTogetherRuntime.instance;
+    if (player == null ||
+        uri == null ||
+        !runtime.isGuest ||
+        !isAllowedTransferUri(uri)) {
+      await runtime.stop();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('OTYA blocked an invalid Together media source.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    try {
+      await player.pause();
+      await player.open(Media(uri.toString()), play: false);
+      runtime.attachPlayer(player);
+      if (!mounted) return;
+      setState(() {
+        _togetherGuestStreamActive = true;
+        _position = Duration.zero;
+        _duration = plan.remoteMedia.duration ?? Duration.zero;
+        _ccEnabled = false;
+      });
+      await player.play();
+      await _showActiveTogetherRoom();
+    } catch (_) {
+      await runtime.stop();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('The nearby video stream could not start. Keep both phones on the same network and try again.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _showActiveTogetherRoom() async {
+    final runtime = NearbyTogetherRuntime.instance;
+    if (!mounted || !runtime.active) return;
+
+    await showNearbyTogetherLiveRoomSurface(
+      context: context,
+      runtime: runtime,
+      onMomentTap: (position) => _player?.seek(position),
+      onInvite: () {
+        if (!runtime.isHost || _player == null) return;
+        Navigator.of(context).pop();
+        unawaited(showNearbyTogetherHostSheet(
+          context: context,
+          mediaItem: widget.mediaItem,
+          player: _player!,
+          displayName: ref.read(displayNameProvider),
+        ));
+      },
+      onLeave: () {
+        unawaited(runtime.stop());
+        Navigator.of(context).pop();
+      },
+      onReplay: runtime.isHost
+          ? () {
+              _player?.seek(Duration.zero);
+              _player?.play();
+            }
+          : null,
+      onChooseNext: runtime.isHost
+          ? () {
+              Navigator.of(context).pop();
+              unawaited(_next());
+            }
+          : null,
+    );
+  }
+
   void _showMoreOptions() {
     showModalBottomSheet(
       context: context,
@@ -234,23 +495,55 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
               ),
             ),
             const SizedBox(height: 12),
+            if (!_togetherGuestStreamActive)
+              ListTile(
+                leading: const Icon(
+                  Icons.share_rounded,
+                  color: AppColors.accent,
+                  size: 22,
+                ),
+                title: const Text(
+                  'Share',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontFamily: 'Inter',
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _shareMedia();
+                },
+              ),
             ListTile(
               leading: const Icon(
-                Icons.share_rounded,
+                Icons.people_alt_rounded,
                 color: AppColors.accent,
                 size: 22,
               ),
-              title: const Text(
-                'Share',
-                style: TextStyle(
+              title: Text(
+                NearbyTogetherRuntime.instance.active
+                    ? 'Together'
+                    : 'Watch Together',
+                style: const TextStyle(
                   color: AppColors.textPrimary,
                   fontFamily: 'Inter',
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              subtitle: Text(
+                NearbyTogetherRuntime.instance.active
+                    ? 'Open the active session'
+                    : 'Watch this video with someone nearby',
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontFamily: 'Inter',
+                  fontSize: 12,
                 ),
               ),
               onTap: () async {
                 Navigator.pop(context);
-                await _shareMedia();
+                await _showTogetherEntry();
               },
             ),
             ListTile(
@@ -287,16 +580,27 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
                       children: [
                         VideoInfoRow(
                           label: 'Title',
-                          value: widget.mediaItem.title,
+                          value: _visibleTitle,
                         ),
                         VideoInfoRow(
-                          label: 'Path',
-                          value: widget.mediaItem.filePath,
+                          label: 'Source',
+                          value: _togetherGuestStreamActive
+                              ? 'Nearby Together'
+                              : widget.mediaItem.filePath,
                         ),
-                        VideoInfoRow(label: 'Size', value: size),
+                        VideoInfoRow(
+                          label: 'Size',
+                          value: _togetherGuestStreamActive
+                              ? (NearbyTogetherRuntime.instance.guestPlan?.remoteMedia.byteLength != null
+                                  ? _formatBytes(NearbyTogetherRuntime.instance.guestPlan!.remoteMedia.byteLength)
+                                  : 'Unknown')
+                              : size,
+                        ),
                         VideoInfoRow(
                           label: 'Duration',
-                          value: widget.mediaItem.formattedDuration,
+                          value: _togetherGuestStreamActive
+                              ? _formatDuration(_duration)
+                              : widget.mediaItem.formattedDuration,
                         ),
                       ],
                     ),
@@ -313,71 +617,87 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
                 );
               },
             ),
-            ListTile(
-              leading: const Icon(
-                Icons.audiotrack_rounded,
-                color: AppColors.textSecondary,
-                size: 22,
-              ),
-              title: const Text(
-                'Extract Audio',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontFamily: 'Inter',
-                  fontWeight: FontWeight.w500,
+            if (!_togetherGuestStreamActive)
+              ListTile(
+                leading: const Icon(
+                  Icons.audiotrack_rounded,
+                  color: AppColors.textSecondary,
+                  size: 22,
                 ),
-              ),
-              onTap: () async {
-                Navigator.pop(context);
-                final messenger = ScaffoldMessenger.of(context);
-                messenger.showSnackBar(
-                  const SnackBar(
-                    content: Text('Extracting audio…'),
-                    duration: Duration(seconds: 30),
-                    backgroundColor: AppColors.surface,
+                title: const Text(
+                  'Extract Audio',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontFamily: 'Inter',
+                    fontWeight: FontWeight.w500,
                   ),
-                );
-                final result = await FfmpegService.instance.extractAudio(
-                  videoPath: widget.mediaItem.filePath,
-                );
-                messenger.hideCurrentSnackBar();
-                if (!mounted) return;
-                messenger.showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      result != null
-                          ? 'Audio saved: $result'
-                          : 'Failed to extract audio',
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final messenger = ScaffoldMessenger.of(context);
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Text('Extracting audio…'),
+                      duration: Duration(seconds: 30),
+                      backgroundColor: AppColors.surface,
                     ),
-                    backgroundColor:
-                        result != null ? AppColors.surface : AppColors.error,
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.content_cut_rounded,
-                color: AppColors.textSecondary,
-                size: 22,
+                  );
+                  final result = await FfmpegService.instance.extractAudio(
+                    videoPath: widget.mediaItem.filePath,
+                  );
+                  messenger.hideCurrentSnackBar();
+                  if (!mounted) return;
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        result != null
+                            ? 'Audio saved: $result'
+                            : 'Failed to extract audio',
+                      ),
+                      backgroundColor:
+                          result != null ? AppColors.surface : AppColors.error,
+                    ),
+                  );
+                },
               ),
-              title: const Text(
-                'Trim Video',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontFamily: 'Inter',
-                  fontWeight: FontWeight.w500,
+            if (!_togetherGuestStreamActive)
+              ListTile(
+                leading: const Icon(
+                  Icons.content_cut_rounded,
+                  color: AppColors.textSecondary,
+                  size: 22,
                 ),
+                title: const Text(
+                  'Trim Video',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontFamily: 'Inter',
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  context.push('/tools/whatsapp', extra: widget.mediaItem);
+                },
               ),
-              onTap: () {
-                Navigator.pop(context);
-                context.push('/tools/whatsapp', extra: widget.mediaItem);
-              },
-            ),
           ],
         ),
       ),
     );
+  }
+
+  static String _formatBytes(int bytes) {
+    if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    }
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  static String _formatDuration(Duration value) {
+    final h = value.inHours;
+    final m = value.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = value.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return h > 0 ? '$h:$m:$s' : '$m:$s';
   }
 
   void _showSpeedPicker() {
@@ -450,11 +770,22 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
     setState(() => _position = position);
   }
 
-  void _previous() {
-    ref.read(queueProvider.notifier).previous();
+  Future<void> _previous() async {
+    final runtime = NearbyTogetherRuntime.instance;
+    if (runtime.active && runtime.isGuest) {
+      _showHostControlsQueueMessage();
+      return;
+    }
+
+    final beforeIndex = ref.read(queueProvider).currentIndex;
+    final queue = ref.read(queueProvider.notifier);
+    queue.previous();
     final previous = ref.read(queueProvider).current;
     if (previous != null && context.mounted) {
-      _openQueuedVideo(previous);
+      final opened = await _openQueuedVideo(previous);
+      if (!opened && context.mounted) {
+        queue.restoreCurrentIndex(beforeIndex);
+      }
     }
   }
 
@@ -466,11 +797,22 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
     }
   }
 
-  void _next() {
-    ref.read(queueProvider.notifier).next();
+  Future<void> _next() async {
+    final runtime = NearbyTogetherRuntime.instance;
+    if (runtime.active && runtime.isGuest) {
+      _showHostControlsQueueMessage();
+      return;
+    }
+
+    final beforeIndex = ref.read(queueProvider).currentIndex;
+    final queue = ref.read(queueProvider.notifier);
+    queue.next();
     final next = ref.read(queueProvider).current;
     if (next != null && context.mounted) {
-      _openQueuedVideo(next);
+      final opened = await _openQueuedVideo(next);
+      if (!opened && context.mounted) {
+        queue.restoreCurrentIndex(beforeIndex);
+      }
     }
   }
 
@@ -529,6 +871,15 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
         unawaited(PipService.instance.setVideoPlaying(playing: playing));
       }
     });
+
+    final runtime = NearbyTogetherRuntime.instance;
+    if (runtime.active) runtime.attachPlayer(player);
+  }
+
+  Future<void> _leavePlayer() async {
+    await NearbyTogetherRuntime.instance.stop();
+    if (!mounted) return;
+    Navigator.of(context).pop();
   }
 
   @override
@@ -537,10 +888,14 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
     _positionSub?.cancel();
     _durationSub?.cancel();
     _playingSub?.cancel();
-    if (_player != null) {
-      PlaybackCoordinator.instance.unregister(_player!);
+    NearbyTogetherRuntime.instance.removeListener(_handleTogetherRuntimeChanged);
+    final player = _player;
+    if (player != null) {
+      NearbyTogetherRuntime.instance.detachPlayer(player);
+      PlaybackCoordinator.instance.unregister(player);
     }
     if (!_handoffToAnotherVideo) {
+      unawaited(NearbyTogetherRuntime.instance.stop());
       Future.microtask(_restoreOrientation);
     }
     WidgetsBinding.instance.removeObserver(this);
@@ -590,7 +945,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
                   behavior: HitTestBehavior.translucent,
                   onTap: _resetHideTimer,
                   child: VideoPlayerControlsOverlay(
-                    title: widget.mediaItem.title,
+                    title: _visibleTitle,
                     ccEnabled: _ccEnabled,
                     isMuted: _isMuted,
                     isPlaying: _isPlaying,
@@ -598,9 +953,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
                     duration: _duration,
                     playbackSpeed: _playbackSpeed,
                     aspectRatioLabel: _aspectRatioLabels[_aspectRatioIndex],
-                    onBack: () {
-                      Navigator.of(context).pop();
-                    },
+                    onBack: () => unawaited(_leavePlayer()),
                     onToggleSubtitles: _toggleSubtitles,
                     onAudioTracks: _showAudioTracks,
                     onEqualizer: () {
@@ -614,9 +967,9 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
                     onSeekChanged: _seekChanged,
                     onSeekEnd: _seekEnd,
                     onRewind: _rewind,
-                    onPrevious: _previous,
+                    onPrevious: () => unawaited(_previous()),
                     onPlayPause: _togglePlayback,
-                    onNext: _next,
+                    onNext: () => unawaited(_next()),
                     onForward: _forward,
                     onSpeed: _showSpeedPicker,
                     onAspectRatio: _cycleAspectRatio,

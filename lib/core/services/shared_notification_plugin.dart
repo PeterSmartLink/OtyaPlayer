@@ -1,4 +1,4 @@
-// One FlutterLocalNotificationsPlugin shared by OTYA's local notification
+// One FlutterLocalNotificationsPlugin shared by Otya's local notification
 // owners so Android channel registration and tap handling stay centralized.
 //
 // Notification routing:

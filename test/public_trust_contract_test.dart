@@ -10,13 +10,14 @@ void main() {
     ).readAsStringSync();
 
     for (final text in [policy, inApp]) {
-      expect(text, contains('September 3, 2026'));
+      expect(text, contains('September 5, 2026'));
       expect(text, contains('Cloudflare'));
       expect(text, contains('Firebase'));
-      expect(text, contains('Next'));
+      expect(text, contains('Together'));
       expect(text, contains('Google Drive'));
       expect(text, contains('support@petersmartlink.com'));
       expect(text, isNot(contains('Privacy Policy — Played')));
+      expect(text, isNot(contains('Messages you send to Next')));
       expect(text, isNot(contains('Appwrite')));
       expect(text, isNot(contains('AdMob')));
       expect(text, isNot(contains('We do NOT collect')));

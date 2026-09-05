@@ -70,10 +70,8 @@ void main() {
     expect(source, isNot(contains('OnlineTrack')));
     expect(source, isNot(contains('Connectivity().checkConnectivity()')));
     expect(source, isNot(contains('cached_network_image')));
-    expect(
-      source,
-      contains('Search does not contact a music provider while you type.'),
-    );
+    expect(source, contains('Search stays local'));
+    expect(source, contains('does not contact an online provider'));
   });
 
   test('Online Music implementation and provider config stay removed', () {

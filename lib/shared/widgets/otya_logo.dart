@@ -1,7 +1,7 @@
 // Canonical Otya brand components.
 //
-// Product surfaces and Next share the same approved Otya mark. Next keeps its
-// semantic helper names for source compatibility, and only adds an activity
-// treatment while it is thinking; it is not a separate logo or color system.
+// Product surfaces use the same approved Otya mark and cyan/blue identity.
+// Assistant-specific thinking behaviour remains an admin/compatibility concern;
+// it must not introduce a second public logo or color system.
 export 'otya_logo_v2.dart' hide OtyaThinkingMark;
 export 'otya_ai_mark.dart' show OtyaAiMark, OtyaThinkingMark;

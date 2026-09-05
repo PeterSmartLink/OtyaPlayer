@@ -5,7 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../app/router.dart';
 import 'shared_notification_plugin.dart';
 
-/// Push/announcement notification owner for OTYA.
+/// Push/announcement notification owner for Otya.
 ///
 /// Update notifications never download or install an APK inside the app. A tap
 /// opens only an HTTPS destination on an official PeterSmart Link host in the
@@ -125,14 +125,14 @@ class PushNotificationService {
 
     final androidDetails = AndroidNotificationDetails(
       _chUpdates,
-      'OTYA — Updates',
-      channelDescription: 'Alerts when a new OTYA version is available',
+      'Otya — Updates',
+      channelDescription: 'Alerts when a new Otya version is available',
       importance: Importance.high,
       priority: Priority.high,
       icon: '@drawable/ic_notification',
       styleInformation: BigTextStyleInformation(
         releaseNotes,
-        contentTitle: 'OTYA $version is available',
+        contentTitle: 'Otya $version is available',
         summaryText: 'Tap to open the official update destination',
       ),
     );
@@ -156,8 +156,8 @@ class PushNotificationService {
 
     final androidDetails = AndroidNotificationDetails(
       _chAnnounce,
-      'OTYA — Announcements',
-      channelDescription: 'General announcements from OTYA',
+      'Otya — Announcements',
+      channelDescription: 'General announcements from Otya',
       importance: Importance.defaultImportance,
       priority: Priority.defaultPriority,
       icon: '@drawable/ic_notification',
@@ -174,7 +174,7 @@ class PushNotificationService {
     debugPrint('[PushNotif] showAnnouncement: $title');
   }
 
-  /// Compatibility cleanup for older callers. OTYA no longer owns an in-app
+  /// Compatibility cleanup for older callers. Otya no longer owns an in-app
   /// update download progress notification.
   Future<void> dismissDownload() async {}
 }

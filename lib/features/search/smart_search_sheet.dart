@@ -8,7 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../app/theme/app_colors.dart';
 import '../../core/models/media_item.dart';
 import '../../core/models/playlist.dart';
-import '../../core/services/otya_support_service.dart';
 import '../my_space/presentation/providers/my_space_provider.dart';
 import '../player/presentation/mini_player.dart';
 import '../player/presentation/queue_screen.dart';
@@ -56,21 +55,41 @@ class _SmartSearchSheetState extends ConsumerState<SmartSearchSheet> {
 
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
-  final _ai = OtyaSupportService.instance;
 
   String _query = '';
-  String? _aiAnswer;
-  String? _aiError;
-  bool _asking = false;
   List<String> _recentSearches = const [];
 
   static const _help = <_HelpHit>[
-    _HelpHit('Add subtitles', 'Open a video and use the CC control. Otya can select embedded subtitle tracks when they are available.', ['subtitle', 'subtitles', 'caption', 'captions', 'cc']),
-    _HelpHit('Media is missing', 'Open Otya Settings and review Android media permissions, then refresh Video or Music. Local scanning never requires an account.', ['missing', 'scan', 'media', 'library', 'permission']),
-    _HelpHit('Transfer files', 'Open Me → Transfer. Keep both devices on the same Wi-Fi or hotspot, then scan the sender QR code or open its local link.', ['transfer', 'send', 'receive', 'nearby', 'qr', 'computer']),
-    _HelpHit('Convert video to audio', 'Open Me → Converter and choose a local video. Otya extracts its existing audio track on the device without uploading it.', ['convert', 'converter', 'extract audio', 'm4a']),
-    _HelpHit('Private media', 'Open Me → Private. Protected media stays in Otya app-private storage until you restore it.', ['private', 'vault', 'lock', 'hide media']),
-    _HelpHit('Downloads', 'Playable files in Android Download/Downloads folders automatically belong to Video or Music after scanning. Me → Files → Downloads shows that subset.', ['download', 'downloads', 'downloaded']),
+    _HelpHit(
+      'Add subtitles',
+      'Open a video and use the CC control. Otya can select embedded subtitle tracks when they are available.',
+      ['subtitle', 'subtitles', 'caption', 'captions', 'cc'],
+    ),
+    _HelpHit(
+      'Media is missing',
+      'Open Otya Settings and review Android media permissions, then refresh Video or Music. Local scanning never requires an account.',
+      ['missing', 'scan', 'media', 'library', 'permission'],
+    ),
+    _HelpHit(
+      'Send files',
+      'Open Me → Send. Keep both devices on the same Wi-Fi or hotspot, then scan the sender QR code or open its local link.',
+      ['transfer', 'send', 'receive', 'nearby', 'qr', 'computer'],
+    ),
+    _HelpHit(
+      'Convert video to audio',
+      'Open Me → Tools and choose Convert video to audio. Otya extracts the existing audio track on this device without uploading the file.',
+      ['convert', 'converter', 'extract audio', 'm4a'],
+    ),
+    _HelpHit(
+      'Private media',
+      'Open Me → Private. Protected media stays in Otya app-private storage until you restore it.',
+      ['private', 'vault', 'lock', 'hide media'],
+    ),
+    _HelpHit(
+      'Downloads',
+      'Playable files in Android Download/Downloads folders automatically belong to Video or Music after scanning. Me → Files → Downloads shows that subset.',
+      ['download', 'downloads', 'downloaded'],
+    ),
   ];
 
   @override
@@ -140,7 +159,8 @@ class _SmartSearchSheetState extends ConsumerState<SmartSearchSheet> {
     final q = _q;
     if (q.isEmpty) return const [];
     return items.where((item) {
-      final file = item.filePath.replaceAll('\\', '/').split('/').last.toLowerCase();
+      final file =
+          item.filePath.replaceAll('\\', '/').split('/').last.toLowerCase();
       return item.title.toLowerCase().contains(q) ||
           (item.artist?.toLowerCase().contains(q) ?? false) ||
           (item.album?.toLowerCase().contains(q) ?? false) ||
@@ -153,7 +173,11 @@ class _SmartSearchSheetState extends ConsumerState<SmartSearchSheet> {
     if (q.isEmpty) return const [];
     final hits = <_GroupHit>[];
 
-    void addGroups(String type, Iterable<MediaItem> source, String Function(MediaItem) key) {
+    void addGroups(
+      String type,
+      Iterable<MediaItem> source,
+      String Function(MediaItem) key,
+    ) {
       final grouped = <String, List<MediaItem>>{};
       for (final item in source) {
         final name = key(item).trim();
@@ -167,8 +191,16 @@ class _SmartSearchSheetState extends ConsumerState<SmartSearchSheet> {
       }
     }
 
-    addGroups('Album', items.where((item) => !item.isVideo), (item) => item.album ?? '');
-    addGroups('Artist', items.where((item) => !item.isVideo), (item) => item.artist ?? '');
+    addGroups(
+      'Album',
+      items.where((item) => !item.isVideo),
+      (item) => item.album ?? '',
+    );
+    addGroups(
+      'Artist',
+      items.where((item) => !item.isVideo),
+      (item) => item.artist ?? '',
+    );
     addGroups('Folder', items, (item) {
       final parts = item.filePath.replaceAll('\\', '/').split('/');
       return parts.length >= 2 ? parts[parts.length - 2] : 'Device';
@@ -178,7 +210,9 @@ class _SmartSearchSheetState extends ConsumerState<SmartSearchSheet> {
       final aStarts = a.name.toLowerCase().startsWith(q) ? 0 : 1;
       final bStarts = b.name.toLowerCase().startsWith(q) ? 0 : 1;
       final priority = aStarts.compareTo(bStarts);
-      return priority != 0 ? priority : a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      return priority != 0
+          ? priority
+          : a.name.toLowerCase().compareTo(b.name.toLowerCase());
     });
     return hits.take(12).toList(growable: false);
   }
@@ -186,7 +220,10 @@ class _SmartSearchSheetState extends ConsumerState<SmartSearchSheet> {
   List<Playlist> _playlistMatches(List<Playlist> playlists) {
     final q = _q;
     if (q.isEmpty) return const [];
-    return playlists.where((playlist) => playlist.name.toLowerCase().contains(q)).take(8).toList(growable: false);
+    return playlists
+        .where((playlist) => playlist.name.toLowerCase().contains(q))
+        .take(8)
+        .toList(growable: false);
   }
 
   List<_HelpHit> _helpMatches() {
@@ -194,37 +231,13 @@ class _SmartSearchSheetState extends ConsumerState<SmartSearchSheet> {
     if (q.isEmpty) return const [];
     return _help.where((entry) {
       if (entry.title.toLowerCase().contains(q)) return true;
-      return entry.keywords.any((keyword) => q.contains(keyword) || keyword.contains(q));
+      return entry.keywords
+          .any((keyword) => q.contains(keyword) || keyword.contains(q));
     }).take(5).toList(growable: false);
   }
 
   void _queryChanged(String value) {
-    setState(() {
-      _query = value;
-      _aiAnswer = null;
-      _aiError = null;
-    });
-  }
-
-  Future<void> _askAi() async {
-    final query = _query.trim();
-    if (query.isEmpty || _asking) return;
-    unawaited(_rememberQuery(query));
-    setState(() {
-      _asking = true;
-      _aiAnswer = null;
-      _aiError = null;
-    });
-    try {
-      final reply = await _ai.ask(query);
-      if (mounted) setState(() => _aiAnswer = reply.answer);
-    } catch (_) {
-      if (mounted) {
-        setState(() => _aiError = 'Next is unavailable right now. Local Search and offline help still work.');
-      }
-    } finally {
-      if (mounted) setState(() => _asking = false);
-    }
+    setState(() => _query = value);
   }
 
   void _closeThen(VoidCallback action) {
@@ -240,49 +253,85 @@ class _SmartSearchSheetState extends ConsumerState<SmartSearchSheet> {
   }
 
   void _openMedia(MediaItem item, List<MediaItem> library) {
-    final queue = library.where((candidate) => candidate.isVideo == item.isVideo).toList();
+    final queue = library
+        .where((candidate) => candidate.isVideo == item.isVideo)
+        .toList();
     final index = queue.indexWhere((candidate) => candidate.id == item.id);
-    ref.read(queueProvider.notifier).setQueue(queue, startIndex: index < 0 ? 0 : index);
+    ref
+        .read(queueProvider.notifier)
+        .setQueue(queue, startIndex: index < 0 ? 0 : index);
     if (!item.isVideo) ref.read(miniPlayerItemProvider.notifier).state = item;
-    _rememberAndClose(() => context.push(item.isVideo ? '/player/video' : '/player/audio', extra: item));
+    _rememberAndClose(
+      () => context.push(
+        item.isVideo ? '/player/video' : '/player/audio',
+        extra: item,
+      ),
+    );
   }
 
   void _openGroup(_GroupHit hit) {
     final type = hit.type;
     if (type == 'Album') {
-      _rememberAndClose(() => context.push('/music/album', extra: {'name': hit.name, 'items': hit.items}));
+      _rememberAndClose(
+        () => context.push(
+          '/music/album',
+          extra: {'name': hit.name, 'items': hit.items},
+        ),
+      );
     } else if (type == 'Artist') {
-      _rememberAndClose(() => context.push('/music/artist', extra: {'name': hit.name, 'items': hit.items}));
+      _rememberAndClose(
+        () => context.push(
+          '/music/artist',
+          extra: {'name': hit.name, 'items': hit.items},
+        ),
+      );
     } else {
       final hasVideo = hit.items.any((item) => item.isVideo);
       final hasAudio = hit.items.any((item) => !item.isVideo);
       if (hasVideo && !hasAudio) {
-        _rememberAndClose(() => context.push('/video/folder', extra: {'name': hit.name, 'items': hit.items}));
+        _rememberAndClose(
+          () => context.push(
+            '/video/folder',
+            extra: {'name': hit.name, 'items': hit.items},
+          ),
+        );
       } else if (hasAudio && !hasVideo) {
-        _rememberAndClose(() => context.push('/music/folder', extra: {'name': hit.name, 'items': hit.items}));
+        _rememberAndClose(
+          () => context.push(
+            '/music/folder',
+            extra: {'name': hit.name, 'items': hit.items},
+          ),
+        );
       } else {
         final path = hit.items.first.filePath.replaceAll('\\', '/');
         final slash = path.lastIndexOf('/');
-        _rememberAndClose(() => context.push('/tools/folder-detail', extra: {
-          'folderName': hit.name,
-          'fullPath': slash > 0 ? path.substring(0, slash) : '/',
-          'items': hit.items,
-        }));
+        _rememberAndClose(
+          () => context.push(
+            '/tools/folder-detail',
+            extra: {
+              'folderName': hit.name,
+              'fullPath': slash > 0 ? path.substring(0, slash) : '/',
+              'items': hit.items,
+            },
+          ),
+        );
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final library = ref.watch(mediaLibraryProvider).valueOrNull ?? const <MediaItem>[];
+    final library =
+        ref.watch(mediaLibraryProvider).valueOrNull ?? const <MediaItem>[];
     final playlists = ref.watch(playlistsProvider);
-    final historyEnabled = ref.watch(settingsProvider.select((s) => s.searchHistory));
+    final historyEnabled =
+        ref.watch(settingsProvider.select((s) => s.searchHistory));
     final media = _mediaMatches(library);
     final groups = _groupMatches(library);
     final playlistHits = _playlistMatches(playlists);
     final help = _helpMatches();
     final hasQuery = _q.isNotEmpty;
-    final noLocalAnswer = hasQuery &&
+    final noResults = hasQuery &&
         media.isEmpty &&
         groups.isEmpty &&
         playlistHits.isEmpty &&
@@ -305,13 +354,7 @@ class _SmartSearchSheetState extends ConsumerState<SmartSearchSheet> {
             controller: _controller,
             focusNode: _focusNode,
             textInputAction: TextInputAction.search,
-            onSubmitted: (_) {
-              if (noLocalAnswer) {
-                unawaited(_askAi());
-              } else {
-                unawaited(_rememberQuery(_query));
-              }
-            },
+            onSubmitted: (_) => unawaited(_rememberQuery(_query)),
             onChanged: _queryChanged,
             decoration: InputDecoration(
               hintText: 'Search Otya',
@@ -322,11 +365,7 @@ class _SmartSearchSheetState extends ConsumerState<SmartSearchSheet> {
                       tooltip: 'Clear',
                       onPressed: () {
                         _controller.clear();
-                        setState(() {
-                          _query = '';
-                          _aiAnswer = null;
-                          _aiError = null;
-                        });
+                        setState(() => _query = '');
                       },
                       icon: const Icon(Icons.close_rounded),
                     ),
@@ -348,105 +387,171 @@ class _SmartSearchSheetState extends ConsumerState<SmartSearchSheet> {
                   onClearRecent: _clearSearchHistory,
                 )
               : ListView(
-                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
                   padding: const EdgeInsets.fromLTRB(16, 2, 16, 30),
                   children: [
                     if (groups.isNotEmpty) ...[
-                      _SectionLabel('Albums, artists & folders', '${groups.length}'),
-                      ...groups.map((hit) => ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                            leading: CircleAvatar(
-                              backgroundColor: AppColors.cardOf(context),
-                              child: Icon(
-                                hit.type == 'Album'
-                                    ? Icons.album_rounded
-                                    : hit.type == 'Artist'
-                                        ? Icons.person_rounded
-                                        : Icons.folder_rounded,
-                                color: AppColors.accent,
-                              ),
+                      _SectionLabel(
+                        'Albums, artists & folders',
+                        '${groups.length}',
+                      ),
+                      ...groups.map(
+                        (hit) => ListTile(
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 4),
+                          leading: CircleAvatar(
+                            backgroundColor: AppColors.cardOf(context),
+                            child: Icon(
+                              hit.type == 'Album'
+                                  ? Icons.album_rounded
+                                  : hit.type == 'Artist'
+                                      ? Icons.person_rounded
+                                      : Icons.folder_rounded,
+                              color: AppColors.accent,
                             ),
-                            title: Text(hit.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-                            subtitle: Text('${hit.type} · ${hit.items.length} item${hit.items.length == 1 ? '' : 's'}'),
-                            trailing: const Icon(Icons.chevron_right_rounded),
-                            onTap: () => _openGroup(hit),
-                          )),
+                          ),
+                          title: Text(
+                            hit.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          subtitle: Text(
+                            '${hit.type} · ${hit.items.length} item${hit.items.length == 1 ? '' : 's'}',
+                          ),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: () => _openGroup(hit),
+                        ),
+                      ),
                     ],
                     if (playlistHits.isNotEmpty) ...[
                       _SectionLabel('Playlists', '${playlistHits.length}'),
-                      ...playlistHits.map((playlist) => ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                            leading: const CircleAvatar(child: Icon(Icons.queue_music_rounded)),
-                            title: Text(playlist.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-                            subtitle: Text('${playlist.mediaIds.length} saved item${playlist.mediaIds.length == 1 ? '' : 's'}'),
-                            trailing: const Icon(Icons.chevron_right_rounded),
-                            onTap: () => _rememberAndClose(() => context.push('/playlist/${playlist.id}')),
-                          )),
+                      ...playlistHits.map(
+                        (playlist) => ListTile(
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 4),
+                          leading: const CircleAvatar(
+                            child: Icon(Icons.queue_music_rounded),
+                          ),
+                          title: Text(
+                            playlist.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          subtitle: Text(
+                            '${playlist.mediaIds.length} saved item${playlist.mediaIds.length == 1 ? '' : 's'}',
+                          ),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: () => _rememberAndClose(
+                            () => context.push('/playlist/${playlist.id}'),
+                          ),
+                        ),
+                      ),
                     ],
                     if (media.isNotEmpty) ...[
                       _SectionLabel('On this phone', '${media.length}'),
-                      ...media.map((item) => ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                            leading: CircleAvatar(
-                              backgroundColor: AppColors.cardOf(context),
-                              child: Icon(item.isVideo ? Icons.movie_outlined : Icons.music_note_rounded, color: AppColors.accent),
-                            ),
-                            title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-                            subtitle: Text(
+                      ...media.map(
+                        (item) => ListTile(
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 4),
+                          leading: CircleAvatar(
+                            backgroundColor: AppColors.cardOf(context),
+                            child: Icon(
                               item.isVideo
-                                  ? '${item.formattedDuration} · ${item.formattedSize}'
-                                  : (item.artist?.trim().isNotEmpty == true ? item.artist!.trim() : item.formattedDuration),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                                  ? Icons.movie_outlined
+                                  : Icons.music_note_rounded,
+                              color: AppColors.accent,
                             ),
-                            trailing: const Icon(Icons.play_arrow_rounded),
-                            onTap: () => _openMedia(item, library),
-                          )),
+                          ),
+                          title: Text(
+                            item.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          subtitle: Text(
+                            item.isVideo
+                                ? '${item.formattedDuration} · ${item.formattedSize}'
+                                : (item.artist?.trim().isNotEmpty == true
+                                    ? item.artist!.trim()
+                                    : item.formattedDuration),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: const Icon(Icons.play_arrow_rounded),
+                          onTap: () => _openMedia(item, library),
+                        ),
+                      ),
                     ],
                     if (help.isNotEmpty) ...[
                       _SectionLabel('Otya help', '${help.length}'),
-                      ...help.map((entry) => Container(
-                            margin: const EdgeInsets.only(bottom: 9),
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(15),
-                              border: Border.all(color: AppColors.borderOf(context)),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(entry.title, style: const TextStyle(fontWeight: FontWeight.w800)),
-                                const SizedBox(height: 5),
-                                Text(entry.answer, style: const TextStyle(fontSize: 12.5, height: 1.45, color: AppColors.textSecondary)),
-                              ],
-                            ),
-                          )),
-                    ],
-                    if (noLocalAnswer || _aiAnswer != null || _aiError != null) ...[
-                      _SectionLabel('Next', noLocalAnswer ? 'Optional online help' : ''),
-                      if (_aiAnswer != null)
-                        Container(
-                          padding: const EdgeInsets.all(15),
+                      ...help.map(
+                        (entry) => Container(
+                          margin: const EdgeInsets.only(bottom: 9),
+                          padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: AppColors.cardOf(context),
                             borderRadius: BorderRadius.circular(15),
-                            border: Border.all(color: AppColors.borderOf(context)),
+                            border:
+                                Border.all(color: AppColors.borderOf(context)),
                           ),
-                          child: SelectableText(_aiAnswer!, style: const TextStyle(height: 1.5)),
-                        )
-                      else if (_aiError != null)
-                        Text(_aiError!, style: const TextStyle(color: AppColors.textSecondary))
-                      else
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: _asking ? null : _askAi,
-                            icon: _asking
-                                ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                                : const Icon(Icons.auto_awesome_rounded),
-                            label: Text(_asking ? 'Thinking…' : 'Ask about “${_query.trim()}”', maxLines: 1, overflow: TextOverflow.ellipsis),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                entry.title,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Text(
+                                entry.answer,
+                                style: const TextStyle(
+                                  fontSize: 12.5,
+                                  height: 1.45,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
+                      ),
+                    ],
+                    if (noResults) ...[
+                      const SizedBox(height: 28),
+                      Container(
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          color: AppColors.cardOf(context),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: AppColors.borderOf(context)),
+                        ),
+                        child: const Column(
+                          children: [
+                            Icon(
+                              Icons.search_off_rounded,
+                              color: AppColors.textSecondary,
+                            ),
+                            SizedBox(height: 9),
+                            Text(
+                              'No local matches',
+                              style: TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                            SizedBox(height: 5),
+                            Text(
+                              'Try another file name, artist, album, folder, playlist or Otya help topic.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                height: 1.45,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -471,7 +576,11 @@ class _SearchStart extends StatelessWidget {
   Widget build(BuildContext context) => ListView(
         padding: const EdgeInsets.fromLTRB(28, 44, 28, 28),
         children: [
-          const Icon(Icons.manage_search_rounded, size: 48, color: AppColors.accent),
+          const Icon(
+            Icons.manage_search_rounded,
+            size: 48,
+            color: AppColors.accent,
+          ),
           const SizedBox(height: 14),
           const Text(
             'Search Otya',
@@ -480,9 +589,13 @@ class _SearchStart extends StatelessWidget {
           ),
           const SizedBox(height: 7),
           const Text(
-            'Search local songs, videos, albums, artists, folders and playlists on this device. Search does not contact a music provider while you type.',
+            'Search local songs, videos, albums, artists, folders, playlists and Otya help on this device. Search stays local and does not contact an online provider.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12.5, height: 1.5, color: AppColors.textSecondary),
+            style: TextStyle(
+              fontSize: 12.5,
+              height: 1.5,
+              color: AppColors.textSecondary,
+            ),
           ),
           if (recentSearches.isNotEmpty) ...[
             const SizedBox(height: 30),
@@ -533,10 +646,23 @@ class _SectionLabel extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(2, 13, 2, 7),
         child: Row(
           children: [
-            Text(title.toUpperCase(), style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900, letterSpacing: .5)),
+            Text(
+              title.toUpperCase(),
+              style: const TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w900,
+                letterSpacing: .5,
+              ),
+            ),
             if (detail.isNotEmpty) ...[
               const Spacer(),
-              Text(detail, style: const TextStyle(fontSize: 10.5, color: AppColors.textSecondary)),
+              Text(
+                detail,
+                style: const TextStyle(
+                  fontSize: 10.5,
+                  color: AppColors.textSecondary,
+                ),
+              ),
             ],
           ],
         ),

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'app/app.dart';
+import 'app/theme/app_colors.dart';
 import 'core/database/otya_database.dart';
 import 'core/services/audio_handler.dart';
 import 'core/services/audio_session_service.dart';
@@ -178,7 +179,7 @@ Future<void> _initPlaybackPlatform() async {
       androidNotificationOngoing: false,
       androidStopForegroundOnPause: false,
       androidNotificationIcon: 'drawable/ic_notification',
-      notificationColor: const Color(0xFF2979FF),
+      notificationColor: AppColors.brandBlue,
       androidShowNotificationBadge: false,
       preloadArtwork: true,
     ),

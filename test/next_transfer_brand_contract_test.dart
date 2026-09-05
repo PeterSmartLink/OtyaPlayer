@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('Next uses the approved Otya mark instead of a second logo', () {
+  test('legacy assistant compatibility uses the approved Otya mark', () {
     final mark = File('lib/shared/widgets/otya_ai_mark.dart').readAsStringSync();
     final exports = File('lib/shared/widgets/otya_logo.dart').readAsStringSync();
 
@@ -14,10 +14,10 @@ void main() {
     expect(mark, isNot(contains('Color(0xFFFF3B30)')));
     expect(mark, isNot(contains('Color(0xFFFFD60A)')));
     expect(mark, isNot(contains('three equal balls')));
-    expect(exports, contains('not a separate logo or color system'));
+    expect(exports, contains('must not introduce a second public logo or color system'));
   });
 
-  test('Next and Transfer use the shared branded surface without changing their core contracts', () {
+  test('legacy assistant compatibility and Send keep their core runtime contracts', () {
     final next = File(
       'lib/features/ai/otya_support_screen_v3.dart',
     ).readAsStringSync();

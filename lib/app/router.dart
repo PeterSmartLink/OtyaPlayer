@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 
 import '../core/models/media_item.dart';
 import '../core/services/remote_control_service.dart';
-import '../features/ai/otya_support_screen.dart';
 import '../features/air_drop/presentation/air_drop_screen.dart';
 import '../features/auth/auth_screen.dart';
 import '../features/auth/forgot_password_screen.dart';
@@ -28,7 +27,7 @@ import '../features/profile/profile_screen.dart'
     show ProfileScreen, WhatsNewScreen;
 import '../features/settings/presentation/about_screen.dart';
 import '../features/settings/presentation/privacy_policy_screen.dart';
-import '../features/settings/presentation/settings_with_ai_screen.dart';
+import '../features/settings/presentation/settings_detail_screen.dart';
 import '../features/settings/presentation/storage_analyzer_screen.dart';
 import '../features/settings/presentation/theme_selection_screen.dart';
 import '../features/tools/whatsapp_trimmer_screen.dart';
@@ -132,12 +131,8 @@ class AppRouter {
         pageBuilder: (c, s) =>
             _fadePage(context: c, state: s, child: const DownloadsScreen()),
       ),
-      GoRoute(
-        path: '/support',
-        pageBuilder: (c, s) =>
-            _fadePage(context: c, state: s, child: const OtyaSupportScreen()),
-      ),
-      GoRoute(path: '/ai', redirect: (_, __) => '/support'),
+      GoRoute(path: '/support', redirect: (_, __) => '/about'),
+      GoRoute(path: '/ai', redirect: (_, __) => '/about'),
       GoRoute(
         path: '/auth',
         pageBuilder: (c, s) =>
@@ -175,7 +170,7 @@ class AppRouter {
         pageBuilder: (c, s) => _fadePage(
           context: c,
           state: s,
-          child: const SettingsWithAiScreen(),
+          child: const SettingsDetailScreen(),
         ),
       ),
       GoRoute(

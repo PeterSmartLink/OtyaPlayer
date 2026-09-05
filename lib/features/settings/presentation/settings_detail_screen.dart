@@ -13,10 +13,10 @@ import '../../../core/widgets/update_dialog.dart';
 import '../../../shared/widgets/wallpaper_scaffold.dart';
 import '../settings_provider.dart';
 
-/// Otya v1 preferences.
+/// Otya preferences.
 ///
 /// This screen intentionally exposes only settings that have a real runtime
-/// owner. Legacy donor controls that no longer affect playback are not shown.
+/// owner. Legacy controls that no longer affect playback are not shown.
 class SettingsDetailScreen extends ConsumerWidget {
   const SettingsDetailScreen({super.key});
 
@@ -148,7 +148,7 @@ class SettingsDetailScreen extends ConsumerWidget {
             const _Line(),
             _NavTile(
               icon: Icons.notifications_active_rounded,
-              title: 'Notification permission',
+              title: 'Notifications',
               subtitle: 'Completed tasks, security notices and Otya updates',
               onTap: () async {
                 HapticFeedback.selectionClick();
@@ -191,13 +191,6 @@ class SettingsDetailScreen extends ConsumerWidget {
                 HapticFeedback.selectionClick();
                 await UpdateDialog.checkAndShow(context, forceCheck: true);
               },
-            ),
-            const _Line(),
-            _NavTile(
-              icon: Icons.auto_awesome_rounded,
-              title: 'Next',
-              subtitle: 'Help with playback, Transfer, Private and Otya features',
-              onTap: () => context.push('/support'),
             ),
             const _Line(),
             _NavTile(
@@ -245,7 +238,7 @@ class SettingsDetailScreen extends ConsumerWidget {
       }
 
       final verified = await auth.authenticate(
-        localizedReason: 'Verify your device authentication to enable OTYA App Lock',
+        localizedReason: 'Verify your device authentication to enable Otya App Lock',
         options: const AuthenticationOptions(
           biometricOnly: false,
           stickyAuth: true,
@@ -314,7 +307,7 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
         child: Text(
-          text.toUpperCase(),
+          text,
           style: const TextStyle(
             fontSize: 11,
             letterSpacing: 1.2,

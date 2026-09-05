@@ -131,6 +131,7 @@ class _OtyaProtectedClient extends http.BaseClient {
     '/api/device',
     '/api/devices',
     '/api/account',
+    '/api/together',
   ];
 
   static bool _shouldAttest(Uri uri) {

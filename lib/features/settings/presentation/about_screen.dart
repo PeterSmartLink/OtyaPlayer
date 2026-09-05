@@ -64,13 +64,6 @@ class _AboutScreenState extends State<AboutScreen> {
           _GroupCard(
             children: [
               _NavTile(
-                icon: Icons.auto_awesome_rounded,
-                label: 'Next',
-                subtitle: 'Ask a question or get help with Otya',
-                onTap: () => context.push('/support'),
-              ),
-              const _Divider(),
-              _NavTile(
                 icon: Icons.bug_report_outlined,
                 label: 'Report a problem',
                 subtitle: 'Email Otya Support with a problem report',
@@ -317,7 +310,7 @@ class _ProductCard extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           const Text(
-            'Play and organize local music and video, move supported media nearby, protect private media and use Next when you want connected help. Core playback stays offline-first.',
+            'Play and organize local music and video, send supported media nearby, protect private media and use practical tools. Core playback stays offline-first.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 13,

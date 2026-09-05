@@ -23,7 +23,7 @@ void main() {
 
     expect(fcm, isNot(contains('messaging.requestPermission')));
     expect(fcm, isNot(contains('_ensureNotificationPermission')));
-    expect(settings, contains("title: 'Notification permission'"));
+    expect(settings, contains("title: 'Notifications'"));
     expect(
       settings,
       contains('NotificationService.instance.requestPermission()'),

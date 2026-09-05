@@ -20,7 +20,8 @@ void main() {
     expect(notifications, contains('AudioHandlerSingleton.instance.setPlaying'));
     expectNotContains(handler, "album: 'OTYA Player'");
     expect(main, contains("androidNotificationChannelName: 'Otya — Now Playing'"));
-    expect(main, contains('notificationColor: const Color(0xFF2979FF)'));
+    expect(main, contains('notificationColor: AppColors.brandBlue'));
+    expectNotContains(main, 'notificationColor: const Color(0xFF2979FF)');
   });
 
   test('crash reporting is installed once before the first frame', () {

@@ -54,10 +54,12 @@ void main() {
       final root = Directory('lib');
       final findings = <String>[];
       final forbiddenEverywhere = <RegExp>[
-        RegExp(r'localhost', caseSensitive: false),
-        RegExp(r'127\.0\.0\.1'),
         RegExp(r'\.workers\.dev', caseSensitive: false),
       ];
+      final forbiddenHardcodedLoopbackEndpoint = RegExp(
+        r'https?://(?:localhost|127\.0\.0\.1)',
+        caseSensitive: false,
+      );
       final cleartext = RegExp(r'http://', caseSensitive: false);
 
       if (root.existsSync()) {
@@ -67,14 +69,22 @@ void main() {
           final text = entity.readAsStringSync();
 
           // Otya Transfer is intentionally local-network only and uses
-          // authenticated cleartext HTTP between nearby devices. Transfer has
-          // its own contract tests that reject non-local addresses, so this
-          // production-backend check must not treat that LAN protocol as a
-          // remote cleartext backend endpoint.
-          final isLocalTransferSource =
-              path.startsWith('lib/features/transfer/');
-          if (!isLocalTransferSource && cleartext.hasMatch(text)) {
+          // authenticated cleartext HTTP between nearby devices. Together's
+          // guest proxy also binds through Dart's IPv4 loopback API and never
+          // carries a configurable or remote backend URL. Both protocols have
+          // focused URI-policy tests that reject non-local addresses.
+          final isLocalPeerTransportSource =
+              path.startsWith('lib/features/transfer/') ||
+              path ==
+                  'lib/features/together/data/together_stream_cache_proxy.dart';
+          if (!isLocalPeerTransportSource && cleartext.hasMatch(text)) {
             findings.add('$path matched ${cleartext.pattern}');
+          }
+
+          if (forbiddenHardcodedLoopbackEndpoint.hasMatch(text)) {
+            findings.add(
+              '$path matched ${forbiddenHardcodedLoopbackEndpoint.pattern}',
+            );
           }
 
           for (final pattern in forbiddenEverywhere) {

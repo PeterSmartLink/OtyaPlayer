@@ -18,7 +18,7 @@ void main() {
     expect(main, isNot(contains('AppSettings.load()')));
   });
 
-  test('Me keeps only Transfer Files and Private as primary shortcuts', () {
+  test('Me keeps only Send Files and Private as primary shortcuts', () {
     final source = File(
       'lib/features/my_space/presentation/my_space_hub_screen.dart',
     ).readAsStringSync();
@@ -30,14 +30,15 @@ void main() {
     expect(secondaryStart, greaterThan(quickStart));
 
     final quick = source.substring(quickStart, secondaryStart);
-    expect(quick, contains("title: 'Transfer'"));
+    expect(quick, contains("title: 'Send'"));
     expect(quick, contains("title: 'Files'"));
     expect(quick, contains("title: 'Private'"));
     expect(quick, isNot(contains("title: 'Tools'")));
     expect(quick, isNot(contains("title: 'Playlists'")));
+    expect(quick, isNot(contains("title: 'Next'")));
   });
 
-  test('Me preserves secondary Playlists and avoids duplicate Help/About destinations', () {
+  test('Me preserves secondary media actions without consumer AI', () {
     final source = File(
       'lib/features/my_space/presentation/my_space_hub_screen.dart',
     ).readAsStringSync();
@@ -45,20 +46,22 @@ void main() {
     expect(source, contains("title: 'Playlists'"));
     expect(source, contains("context.push('/playlists')"));
     expect(source, contains("title: 'Tools'"));
-    expect(source, contains("title: 'About Otya'"));
     expect(source, isNot(contains("title: 'Help'")));
+    expect(source, isNot(contains("title: 'Next'")));
+    expect(source, isNot(contains("context.push('/support')")));
   });
 
-  test('Settings keeps playback controls separate from ordinary notification permission', () {
+  test('Settings keeps playback controls separate from ordinary notifications', () {
     final source = File(
       'lib/features/settings/presentation/settings_detail_screen.dart',
     ).readAsStringSync();
 
-    expect(source, contains("title: 'Notification permission'"));
+    expect(source, contains("title: 'Notifications'"));
     expect(source, contains('Completed tasks, security notices and Otya updates'));
     expect(source, isNot(contains('Playback controls, completed tasks')));
-    expect(source, contains("title: 'Next'"));
+    expect(source, isNot(contains("title: 'Next'")));
     expect(source, contains("title: 'About Otya'"));
+    expect(source, contains("const _SectionTitle('Otya')"));
   });
 
   test('About and update surfaces preserve official safe release behavior', () {
@@ -68,7 +71,8 @@ void main() {
     final update = File('lib/core/widgets/update_dialog.dart').readAsStringSync();
 
     expect(about, contains("title: const Text('About Otya')"));
-    expect(about, contains("label: 'Next'"));
+    expect(about, isNot(contains("label: 'Next'")));
+    expect(about, isNot(contains("context.push('/support')")));
     expect(about, contains("subject: 'Otya Problem Report'"));
     expect(about, contains("label: 'Share Otya'"));
     expect(about, contains("subject: 'Otya'"));
@@ -93,19 +97,20 @@ void main() {
     expect(source, isNot(contains('Now Playing controls, lock-screen playback')));
   });
 
-  test('Next has one canonical live screen implementation', () {
-    final entry = File('lib/features/ai/otya_support_screen.dart').readAsStringSync();
+  test('consumer AI stays out of public app routing', () {
+    final router = File('lib/app/router.dart').readAsStringSync();
+    final about = File(
+      'lib/features/settings/presentation/about_screen.dart',
+    ).readAsStringSync();
 
-    expect(entry, contains("export 'otya_support_screen_v3.dart';"));
-    expect(File('lib/features/ai/otya_support_screen_v3.dart').existsSync(), isTrue);
-    expect(File('lib/features/ai/otya_support_screen_v2.dart').existsSync(), isFalse);
+    expect(router, isNot(contains('features/ai/otya_support_screen.dart')));
+    expect(router, contains("GoRoute(path: '/support', redirect: (_, __) => '/about')"));
+    expect(router, contains("GoRoute(path: '/ai', redirect: (_, __) => '/about')"));
+    expect(about, isNot(contains("label: 'Next'")));
   });
 
-  test('touched Phase 3 surfaces use canonical Otya casing', () {
+  test('touched settings and support surfaces use canonical Otya casing', () {
     for (final path in [
-      'lib/app/app.dart',
-      'lib/features/my_space/presentation/my_space_hub_screen.dart',
-      'lib/features/settings/settings_provider.dart',
       'lib/features/settings/presentation/settings_detail_screen.dart',
       'lib/features/settings/presentation/about_screen.dart',
       'lib/core/widgets/update_dialog.dart',

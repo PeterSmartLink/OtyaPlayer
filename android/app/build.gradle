@@ -33,7 +33,7 @@ android {
         versionName = flutter.versionName
         multiDexEnabled = true
 
-        // OTYA v1 currently ships its own UI in English only. Android/system
+        // Otya v1 currently ships its own UI in English only. Android/system
         // components still localize themselves normally; this only avoids
         // bundling unused app/library resource locales into the APK.
         resourceConfigurations += ["en"]
@@ -65,7 +65,7 @@ android {
                 throw new GradleException(
                     "Production release signing key not found at '${keystorePath}'. " +
                     "Provide KEYSTORE_PATH/STORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD. " +
-                    "Only CI test builds may explicitly set OTYA_ALLOW_DEBUG_SIGNING=true."
+                    "Only CI test release builds may explicitly set OTYA_ALLOW_DEBUG_SIGNING=true."
                 )
             }
         }
@@ -86,14 +86,8 @@ android {
         }
         debug {
             debuggable = true
-            // CI may provide the same stable keystore used for official builds.
-            // When present, sign the installable debug APK with it so Google
-            // Sign-In sees a stable SHA fingerprint instead of a fresh runner
-            // debug certificate on every workflow run.
-            def ciKeystorePath = System.getenv("KEYSTORE_PATH")
-            if (ciKeystorePath != null && file(ciKeystorePath).exists()) {
-                signingConfig = signingConfigs.release
-            }
+            // Debug/test APKs intentionally use Android's disposable debug key.
+            // Production signing material is reserved for release/Play workflows.
         }
     }
 }

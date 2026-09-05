@@ -121,6 +121,15 @@ class QueueNotifier extends StateNotifier<QueueState> {
     _recordCurrent();
   }
 
+  /// Restores an already-known queue position without recording a new play.
+  /// This is used when a navigation attempt fails after the queue index moved.
+  void restoreCurrentIndex(int index) {
+    if (state.items.isEmpty) return;
+    state = state.copyWith(
+      currentIndex: index.clamp(0, state.items.length - 1),
+    );
+  }
+
   void toggleShuffle() => state = state.copyWith(shuffle: !state.shuffle);
 
   void clear() => state = const QueueState();
