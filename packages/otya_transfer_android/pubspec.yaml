@@ -1,0 +1,18 @@
+name: otya_transfer_android
+description: First-party Android bridge for OTYA Transfer local hotspot and self-APK sharing.
+version: 1.0.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.petersmartlink.otya_transfer_android
+        pluginClass: OtyaTransferAndroidPlugin

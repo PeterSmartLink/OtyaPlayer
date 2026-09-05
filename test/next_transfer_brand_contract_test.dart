@@ -31,10 +31,12 @@ void main() {
     expect(next, contains('OtyaThinkingMark'));
 
     expect(transfer, contains('WallpaperScaffold('));
-    expect(transfer, contains('_sender.startServing(item.filePath)'));
+    expect(transfer, contains('_serveMedia(item)'));
+    expect(transfer, contains('_sender.startServing('));
     expect(transfer, contains('_receiver.download('));
-    expect(transfer, contains("uri.scheme != 'http'"));
-    expect(transfer, contains('_isPrivateHost(uri.host)'));
+    expect(transfer, contains('isAllowedTransferUri(uri)'));
+    expect(transfer, contains('TransferHotspotService.instance.start()'));
+    expect(transfer, contains('Receive without Otya'));
     expect(transfer, contains('MobileScanner('));
   });
 }

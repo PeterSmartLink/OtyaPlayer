@@ -124,6 +124,8 @@ void main() {
     expect(policy, contains('a == 192 && b == 168'));
     expect(sender, contains("headers.set('X-Otya-Transfer', '1')"));
     expect(sender, contains("'X-Content-Type-Options', 'nosniff'"));
-    expect(sender, contains('_supportedExtensions'));
+    expect(sender, contains('_supportedMediaExtensions'));
+    expect(sender, contains('HttpHeaders.rangeHeader'));
+    expect(sender, contains('_tokenMatches(requestToken, _token)'));
   });
 }

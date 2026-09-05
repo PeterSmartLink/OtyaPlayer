@@ -31,6 +31,11 @@ dependencies:
   otya_media_tools:
     path: packages/otya_media_tools
 
+  # OTYA Transfer owns its nearby Android hotspot/APK bridge in a separate
+  # first-party package so network lifecycle never leaks into MainActivity.
+  otya_transfer_android:
+    path: packages/otya_transfer_android
+
   # Local Database
   hive: ^2.2.3
   hive_flutter: ^1.1.0
@@ -41,7 +46,7 @@ dependencies:
   crypto: ^3.0.5
   local_auth: ^2.3.0
 
-  # OTYA Transfer — pure Dart/local-network transport.
+  # OTYA Transfer — local HTTP transport + nearby QR pairing.
   qr_flutter: ^4.1.0
   mobile_scanner: ^6.0.0
 
@@ -67,7 +72,7 @@ dependencies:
   device_info_plus: ^10.1.0
   package_info_plus: ^8.1.0
 
-  # File System
+  # File System / runtime permissions
   path_provider: ^2.1.5
   permission_handler: ^11.3.1
   image_picker: ^1.1.2
@@ -85,8 +90,8 @@ dependencies:
   # Secure storage for Private/account secrets and local PIN/session state.
   flutter_secure_storage: ^9.2.4
 
-  # Connectivity state only. OTYA Transfer uses Dart sockets/NetworkInterface
-  # and does not scan Wi-Fi networks or require location/nearby permissions.
+  # Connectivity state. Transfer still sends bytes over direct local sockets;
+  # Android's first-party bridge creates a local-only hotspot only when needed.
   connectivity_plus: ^6.1.4
 
   # Utilities
