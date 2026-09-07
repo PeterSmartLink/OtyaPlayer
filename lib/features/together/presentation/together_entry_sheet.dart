@@ -152,7 +152,7 @@ class _TogetherPathCard extends StatelessWidget {
                   style: const TextStyle(
                     color: AppColors.textPrimary,
                     fontSize: 15.5,
-                    fontWeight: FontWeight.w850,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
                 const SizedBox(height: 2),
