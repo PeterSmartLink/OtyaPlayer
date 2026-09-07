@@ -7,12 +7,17 @@ void main() {
     final transfer = File(
       'lib/features/transfer/presentation/transfer_screen.dart',
     ).readAsStringSync();
+    final policy = File(
+      'lib/features/transfer/data/transfer_security_policy.dart',
+    ).readAsStringSync();
 
     expect(transfer, contains('WallpaperScaffold('));
-    expect(transfer, contains('_sender.startServing(item.filePath)'));
+    expect(transfer, contains('_sender.startServingBatch('));
+    expect(transfer, contains('_receiver.discoverBatch(rawUrl)'));
     expect(transfer, contains('_receiver.download('));
-    expect(transfer, contains("uri.scheme != 'http'"));
-    expect(transfer, contains('_isPrivateHost(uri.host)'));
+    expect(policy, contains("uri.scheme == 'http'"));
+    expect(policy, contains('isPrivateTransferIpv4Host(uri.host)'));
+    expect(policy, contains("uri.path != '/batch'"));
     expect(transfer, contains('MobileScanner('));
   });
 
