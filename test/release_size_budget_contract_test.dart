@@ -25,7 +25,7 @@ void main() {
     ).readAsStringSync();
 
     expect(workflow, contains('max_attempts=3'));
-    expect(workflow, contains('build-attempt-${attempt}.log'));
+    expect(workflow, contains(r'build-attempt-${attempt}.log'));
     expect(workflow, contains('successful-build-attempt.txt'));
     expect(workflow, contains('HTTP response code: (408|429|5[0-9]{2})'));
     expect(
