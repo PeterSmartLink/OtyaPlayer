@@ -11,9 +11,9 @@ import 'shared_notification_plugin.dart';
 /// Owns system Now Playing metadata for notification shade, lock screen,
 /// Bluetooth/headset controls and Android media surfaces.
 ///
-/// Android media-session notifications are exempt from the Android 13+
-/// POST_NOTIFICATIONS runtime permission. Keep ordinary notification consent
-/// separate from playback so pressing Play never triggers an unrelated prompt.
+/// Android media-session notifications are separate from ordinary Otya
+/// notification consent. More importantly, Now Playing must be able to recover
+/// if Android's foreground media service was not ready during app bootstrap.
 class MediaNotificationService {
   MediaNotificationService._();
   static final MediaNotificationService instance = MediaNotificationService._();
@@ -29,6 +29,9 @@ class MediaNotificationService {
   Future<void> init() async {
     if (_initialized) return;
     await initSharedNotificationsPlugin();
+    // A startup AudioService failure must not become permanent. The registered
+    // initializer is idempotent and coalesces concurrent attempts.
+    await AudioHandlerSingleton.instance.ensureReady();
     _initialized = true;
     debugPrint('[MediaNotificationService] Initialized.');
   }
@@ -97,6 +100,15 @@ class MediaNotificationService {
     }
   }
 
+  Future<void> _ensureMediaSession() async {
+    final ready = await AudioHandlerSingleton.instance.ensureReady();
+    if (!ready) {
+      debugPrint(
+        '[MediaNotification] Android media session is not ready; state is queued for recovery.',
+      );
+    }
+  }
+
   Future<void> show({
     required String id,
     required String title,
@@ -106,6 +118,7 @@ class MediaNotificationService {
   }) async {
     final generation = ++_metadataGeneration;
     if (!_initialized) await init();
+    await _ensureMediaSession();
     final artUri = await _stableArtUri(albumArtPath, id);
     if (generation != _metadataGeneration) return;
     AudioHandlerSingleton.instance.setMediaItem(
@@ -126,6 +139,7 @@ class MediaNotificationService {
   }) async {
     final generation = ++_metadataGeneration;
     if (!_initialized) await init();
+    await _ensureMediaSession();
     Uri? artUri;
     try {
       final dir = await _artworkDir();
@@ -148,6 +162,7 @@ class MediaNotificationService {
   }
 
   Future<void> updatePlayState(bool isPlaying) async {
+    await _ensureMediaSession();
     AudioHandlerSingleton.instance.setPlaying(isPlaying);
   }
 
