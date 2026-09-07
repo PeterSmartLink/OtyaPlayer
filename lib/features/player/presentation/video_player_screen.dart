@@ -17,12 +17,17 @@ import '../../../core/services/pip_service.dart';
 import '../../../core/services/playback_coordinator.dart';
 import '../../../features/settings/settings_provider.dart';
 import '../../../shared/widgets/speed_picker_sheet.dart';
+import '../../together/application/anywhere_together_runtime.dart';
 import '../../together/application/nearby_together_runtime.dart';
 import '../../together/application/nearby_together_session.dart';
+import '../../together/data/anywhere_together_security.dart';
+import '../../together/presentation/anywhere_together_live_surface.dart';
+import '../../together/presentation/anywhere_together_sheet.dart';
 import '../../together/presentation/nearby_together_host_sheet.dart';
 import '../../together/presentation/nearby_together_join_sheet.dart';
 import '../../together/presentation/nearby_together_live_surface.dart';
 import '../../together/presentation/together_ambient_overlay.dart';
+import '../../together/presentation/together_entry_sheet.dart';
 import '../../transfer/data/transfer_security_policy.dart';
 import 'queue_screen.dart';
 import 'widgets/video_gesture_layer.dart';
@@ -44,6 +49,8 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
   bool _pipInitialized = false;
   bool _handoffToAnotherVideo = false;
   bool _togetherGuestStreamActive = false;
+  bool _anywhereTogetherActive = false;
+  Duration? _positionBeforeTogetherStream;
   late final Duration _savedPosition;
 
   bool _controlsVisible = true;
@@ -79,6 +86,19 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
 
   bool get _persistLocalPosition => !_togetherGuestStreamActive;
 
+  String get _togetherStreamSourceLabel =>
+      AnywhereTogetherRuntime.instance.guestStreaming
+          ? 'Anywhere Together'
+          : 'Nearby Together';
+
+  int? get _togetherStreamByteLength {
+    final anywhere = AnywhereTogetherRuntime.instance;
+    if (anywhere.guestStreaming) {
+      return anywhere.guestPlan?.remoteMedia.byteLength;
+    }
+    return NearbyTogetherRuntime.instance.guestPlan?.remoteMedia.byteLength;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -88,6 +108,9 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
     _position = _savedPosition;
     WidgetsBinding.instance.addObserver(this);
     NearbyTogetherRuntime.instance.addListener(_handleTogetherRuntimeChanged);
+    AnywhereTogetherRuntime.instance.addListener(
+      _handleAnywhereTogetherRuntimeChanged,
+    );
     _initOrientationFromVideo();
     _initPip();
     _resetHideTimer();
@@ -103,6 +126,25 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
       _ccEnabled = false;
       _position = Duration.zero;
       _duration = runtime.guestPlan?.remoteMedia.duration ?? Duration.zero;
+    });
+  }
+
+  void _handleAnywhereTogetherRuntimeChanged() {
+    final runtime = AnywhereTogetherRuntime.instance;
+    if (!mounted) return;
+    final activeChanged = _anywhereTogetherActive != runtime.active;
+    final startsStream = runtime.guestStreaming && !_togetherGuestStreamActive;
+    if (!activeChanged && !startsStream) return;
+    setState(() {
+      _anywhereTogetherActive = runtime.active;
+      if (startsStream) {
+        _togetherGuestStreamActive = true;
+        _ccEnabled = false;
+        _position = Duration.zero;
+        _duration = Duration(
+          milliseconds: runtime.guestPlan?.remoteMedia.durationMs ?? 0,
+        );
+      }
     });
   }
 
@@ -188,9 +230,25 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
   }
 
   Future<bool> _openQueuedVideo(MediaItem item) async {
-    final runtime = NearbyTogetherRuntime.instance;
-    if (runtime.active && runtime.isGuest) {
+    final nearby = NearbyTogetherRuntime.instance;
+    final anywhere = AnywhereTogetherRuntime.instance;
+    if ((nearby.active && nearby.isGuest) ||
+        (anywhere.active && anywhere.isGuest)) {
       _showHostControlsQueueMessage();
+      return false;
+    }
+
+    if (anywhere.active) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Finish the current Anywhere Together video before changing the shared video.',
+            ),
+            backgroundColor: AppColors.surface,
+          ),
+        );
+      }
       return false;
     }
 
@@ -198,16 +256,16 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
       OtyaDatabase.instance.saveSeekPosition(widget.mediaItem.id, _position);
     }
 
-    if (runtime.active && runtime.isHost) {
+    if (nearby.active && nearby.isHost) {
       try {
-        await runtime.prepareHostNextMedia(item);
+        await nearby.prepareHostNextMedia(item);
       } catch (_) {
         await _player?.play();
         if (!mounted) return false;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              runtime.lastError ??
+              nearby.lastError ??
                   'Otya could not change the Together video. Try again.',
             ),
             backgroundColor: AppColors.error,
@@ -299,104 +357,63 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
       return;
     }
 
-    final runtime = NearbyTogetherRuntime.instance;
-    if (runtime.active) {
-      await _showActiveTogetherRoom();
+    final nearby = NearbyTogetherRuntime.instance;
+    final anywhere = AnywhereTogetherRuntime.instance;
+    if (anywhere.active) {
+      await _showActiveAnywhereTogetherRoom();
+      return;
+    }
+    if (nearby.active) {
+      await _showActiveNearbyTogetherRoom();
       return;
     }
 
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      useSafeArea: true,
-      backgroundColor: AppColors.surface.withValues(alpha: .98),
-      barrierColor: Colors.black.withValues(alpha: .42),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (sheetContext) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 42,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.border,
-                borderRadius: BorderRadius.circular(999),
-              ),
-            ),
-            const SizedBox(height: 18),
-            const Text(
-              'Watch Together',
-              style: TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 21,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 5),
-            const Text(
-              'Use the same Wi-Fi or hotspot. OTYA chooses whether to sync your copies or stream directly between the phones.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 12.5,
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ListTile(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-              tileColor: AppColors.accent.withValues(alpha: .08),
-              leading: const CircleAvatar(
-                backgroundColor: Color(0x1A22D3EE),
-                child: Icon(Icons.play_circle_outline_rounded, color: AppColors.accent),
-              ),
-              title: const Text('Start with this video', style: TextStyle(fontWeight: FontWeight.w800)),
-              subtitle: const Text('Show a private QR invite to the other phone.'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () => Navigator.pop(sheetContext, 'start'),
-            ),
-            const SizedBox(height: 10),
-            ListTile(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-              tileColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .55),
-              leading: const CircleAvatar(
-                child: Icon(Icons.qr_code_scanner_rounded),
-              ),
-              title: const Text('Join a friend', style: TextStyle(fontWeight: FontWeight.w800)),
-              subtitle: const Text('Scan the Together QR shown on their OTYA.'),
-              trailing: const Icon(Icons.chevron_right_rounded),
-              onTap: () => Navigator.pop(sheetContext, 'join'),
-            ),
-          ],
-        ),
-      ),
-    );
-
+    final choice = await showTogetherEntrySheet(context);
     if (!mounted || choice == null) return;
-    if (choice == 'start') {
-      await showNearbyTogetherHostSheet(
-        context: context,
-        mediaItem: widget.mediaItem,
-        player: player,
-        displayName: ref.read(displayNameProvider),
-      );
-      return;
-    }
 
-    final plan = await showNearbyTogetherJoinSheet(
-      context: context,
-      currentMediaItem: widget.mediaItem,
-      player: player,
-      displayName: ref.read(displayNameProvider),
-    );
-    if (!mounted || plan == null) return;
-    if (plan.kind == NearbyPlaybackSourceKind.hostLanStream) {
-      await _switchToTogetherStream(plan);
-    } else {
-      await _showActiveTogetherRoom();
+    switch (choice) {
+      case TogetherEntryChoice.nearbyStart:
+        await showNearbyTogetherHostSheet(
+          context: context,
+          mediaItem: widget.mediaItem,
+          player: player,
+          displayName: ref.read(displayNameProvider),
+        );
+        return;
+      case TogetherEntryChoice.nearbyJoin:
+        final plan = await showNearbyTogetherJoinSheet(
+          context: context,
+          currentMediaItem: widget.mediaItem,
+          player: player,
+          displayName: ref.read(displayNameProvider),
+        );
+        if (!mounted || plan == null) return;
+        if (plan.kind == NearbyPlaybackSourceKind.hostLanStream) {
+          await _switchToTogetherStream(plan);
+        } else {
+          await _showActiveNearbyTogetherRoom();
+        }
+        return;
+      case TogetherEntryChoice.anywhereStart:
+        await showAnywhereTogetherHostSheet(
+          context: context,
+          mediaItem: widget.mediaItem,
+          player: player,
+        );
+        return;
+      case TogetherEntryChoice.anywhereJoin:
+        final plan = await showAnywhereTogetherJoinSheet(
+          context: context,
+          currentMediaItem: widget.mediaItem,
+          player: player,
+        );
+        if (!mounted || plan == null) return;
+        if (plan.kind == AnywherePlaybackSourceKind.hostPeerStream) {
+          await _switchToAnywhereTogetherStream(plan);
+        } else {
+          await _showActiveAnywhereTogetherRoom();
+        }
+        return;
     }
   }
 
@@ -420,6 +437,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
     }
 
     try {
+      _positionBeforeTogetherStream = _position;
       await player.pause();
       await player.open(Media(uri.toString()), play: false);
       runtime.attachPlayer(player);
@@ -444,7 +462,64 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
     }
   }
 
+  Future<void> _switchToAnywhereTogetherStream(
+    AnywherePlaybackPlan plan,
+  ) async {
+    final player = _player;
+    final uri = plan.hostMediaUrl;
+    final runtime = AnywhereTogetherRuntime.instance;
+    if (player == null ||
+        uri == null ||
+        !runtime.isGuest ||
+        !isAllowedAnywhereTogetherMediaUri(uri)) {
+      await runtime.stop();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('OTYA blocked an invalid Anywhere Together media source.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    try {
+      _positionBeforeTogetherStream = _position;
+      await player.pause();
+      await player.open(Media(uri.toString()), play: false);
+      runtime.attachPlayer(player);
+      if (!mounted) return;
+      setState(() {
+        _togetherGuestStreamActive = true;
+        _position = Duration.zero;
+        _duration = Duration(milliseconds: plan.remoteMedia.durationMs);
+        _ccEnabled = false;
+      });
+      await player.play();
+      await _showActiveAnywhereTogetherRoom();
+    } catch (_) {
+      await runtime.stop();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'The private peer video stream could not start. Check the internet connection on both phones and try again.',
+          ),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
   Future<void> _showActiveTogetherRoom() async {
+    if (AnywhereTogetherRuntime.instance.active) {
+      await _showActiveAnywhereTogetherRoom();
+      return;
+    }
+    await _showActiveNearbyTogetherRoom();
+  }
+
+  Future<void> _showActiveNearbyTogetherRoom() async {
     final runtime = NearbyTogetherRuntime.instance;
     if (!mounted || !runtime.active) return;
 
@@ -463,8 +538,8 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
         ));
       },
       onLeave: () {
-        unawaited(runtime.stop());
         Navigator.of(context).pop();
+        unawaited(_leaveTogetherSession());
       },
       onReplay: runtime.isHost
           ? () {
@@ -479,6 +554,71 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
             }
           : null,
     );
+  }
+
+  Future<void> _showActiveAnywhereTogetherRoom() async {
+    final runtime = AnywhereTogetherRuntime.instance;
+    if (!mounted || !runtime.active) return;
+
+    await showAnywhereTogetherLiveRoomSurface(
+      context: context,
+      runtime: runtime,
+      onMomentTap: (position) => _player?.seek(position),
+      onInvite: () {
+        if (!runtime.isHost || _player == null) return;
+        Navigator.of(context).pop();
+        unawaited(showAnywhereTogetherHostSheet(
+          context: context,
+          mediaItem: widget.mediaItem,
+          player: _player!,
+        ));
+      },
+      onLeave: () {
+        Navigator.of(context).pop();
+        unawaited(_leaveTogetherSession());
+      },
+      onReplay: runtime.isHost
+          ? () {
+              _player?.seek(Duration.zero);
+              _player?.play();
+            }
+          : null,
+    );
+  }
+
+  Future<void> _leaveTogetherSession() async {
+    final restoreStream = _togetherGuestStreamActive;
+    final restorePosition = _positionBeforeTogetherStream ?? _savedPosition;
+    final shouldResume = _isPlaying;
+    final player = _player;
+
+    await NearbyTogetherRuntime.instance.stop();
+    await AnywhereTogetherRuntime.instance.stop();
+
+    if (!restoreStream || player == null || !mounted) return;
+    try {
+      await player.open(Media(widget.mediaItem.filePath), play: false);
+      if (restorePosition > Duration.zero) {
+        await player.seek(restorePosition);
+      }
+      if (shouldResume) await player.play();
+      if (!mounted) return;
+      setState(() {
+        _togetherGuestStreamActive = false;
+        _positionBeforeTogetherStream = null;
+        _position = restorePosition;
+        _duration = widget.mediaItem.duration;
+        _ccEnabled = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('OTYA left Together, but could not restore the local video.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
   }
 
   void _showMoreOptions() {
@@ -533,7 +673,8 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
                 size: 22,
               ),
               title: Text(
-                NearbyTogetherRuntime.instance.active
+                (NearbyTogetherRuntime.instance.active ||
+                        AnywhereTogetherRuntime.instance.active)
                     ? 'Together'
                     : 'Watch Together',
                 style: const TextStyle(
@@ -543,9 +684,10 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
                 ),
               ),
               subtitle: Text(
-                NearbyTogetherRuntime.instance.active
+                (NearbyTogetherRuntime.instance.active ||
+                        AnywhereTogetherRuntime.instance.active)
                     ? 'Open the active session'
-                    : 'Watch this video with someone nearby',
+                    : 'Watch nearby or privately over the internet',
                 style: const TextStyle(
                   color: AppColors.textSecondary,
                   fontFamily: 'Inter',
@@ -596,14 +738,14 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
                         VideoInfoRow(
                           label: 'Source',
                           value: _togetherGuestStreamActive
-                              ? 'Nearby Together'
+                              ? _togetherStreamSourceLabel
                               : widget.mediaItem.filePath,
                         ),
                         VideoInfoRow(
                           label: 'Size',
                           value: _togetherGuestStreamActive
-                              ? (NearbyTogetherRuntime.instance.guestPlan?.remoteMedia.byteLength != null
-                                  ? _formatBytes(NearbyTogetherRuntime.instance.guestPlan!.remoteMedia.byteLength)
+                              ? (_togetherStreamByteLength != null
+                                  ? _formatBytes(_togetherStreamByteLength!)
                                   : 'Unknown')
                               : size,
                         ),
@@ -883,12 +1025,15 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
       }
     });
 
-    final runtime = NearbyTogetherRuntime.instance;
-    if (runtime.active) runtime.attachPlayer(player);
+    final nearby = NearbyTogetherRuntime.instance;
+    if (nearby.active) nearby.attachPlayer(player);
+    final anywhere = AnywhereTogetherRuntime.instance;
+    if (anywhere.active) anywhere.attachPlayer(player);
   }
 
   Future<void> _leavePlayer() async {
     await NearbyTogetherRuntime.instance.stop();
+    await AnywhereTogetherRuntime.instance.stop();
     if (!mounted) return;
     Navigator.of(context).pop();
   }
@@ -900,13 +1045,18 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
     _durationSub?.cancel();
     _playingSub?.cancel();
     NearbyTogetherRuntime.instance.removeListener(_handleTogetherRuntimeChanged);
+    AnywhereTogetherRuntime.instance.removeListener(
+      _handleAnywhereTogetherRuntimeChanged,
+    );
     final player = _player;
     if (player != null) {
       NearbyTogetherRuntime.instance.detachPlayer(player);
+      AnywhereTogetherRuntime.instance.detachPlayer(player);
       PlaybackCoordinator.instance.unregister(player);
     }
     if (!_handoffToAnotherVideo) {
       unawaited(NearbyTogetherRuntime.instance.stop());
+      unawaited(AnywhereTogetherRuntime.instance.stop());
       Future.microtask(_restoreOrientation);
     }
     WidgetsBinding.instance.removeObserver(this);
@@ -982,6 +1132,21 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
             TogetherAmbientOverlay(
               controlsVisible: _controlsVisible,
               onOpenConversation: () => unawaited(_showActiveTogetherRoom()),
+              listenable: _anywhereTogetherActive
+                  ? AnywhereTogetherRuntime.instance
+                  : null,
+              session: _anywhereTogetherActive
+                  ? () => AnywhereTogetherRuntime.instance.state.session
+                  : null,
+              messages: _anywhereTogetherActive
+                  ? () => AnywhereTogetherRuntime.instance.state.messages
+                  : null,
+              localParticipantId: _anywhereTogetherActive
+                  ? () => AnywhereTogetherRuntime.instance.localParticipantId
+                  : null,
+              active: _anywhereTogetherActive
+                  ? () => AnywhereTogetherRuntime.instance.active
+                  : null,
             ),
           if (_isLocked)
             VideoPlayerLockOverlay(
