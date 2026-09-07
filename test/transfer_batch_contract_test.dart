@@ -18,7 +18,7 @@ void main() {
     expect(sender, contains(r'/batch?t=${session.token}'));
     expect(sender, contains(r'/media/$i?t=$token'));
     expect(sender, contains("'files': items"));
-    expect(sender, isNot(contains('ZipFile')));
+    expect(sender, isNot(contains('ZipFile'));
     expect(sender, isNot(contains('.zip')));
 
     expect(receiver, contains('discoverBatch'));
@@ -42,6 +42,29 @@ void main() {
     expect(receiver, contains('if (!seenUrls.add(normalizedUrl))'));
     expect(receiver, contains('totalBatchBytes += size'));
     expect(receiver, contains('if (totalBatchBytes > _maxBatchBytes)'));
+  });
+
+  test('Receive preflights Android storage before opening the destination sink', () {
+    final receiver = File(
+      'lib/features/transfer/data/media_receiver.dart',
+    ).readAsStringSync();
+    final bridge = File(
+      'packages/otya_transfer_android/lib/otya_transfer_android.dart',
+    ).readAsStringSync();
+    final android = File(
+      'packages/otya_transfer_android/android/src/main/kotlin/com/petersmartlink/otya_transfer_android/OtyaTransferAndroidPlugin.kt',
+    ).readAsStringSync();
+
+    expect(receiver, contains('_storageReserveBytes = 64 * 1024 * 1024'));
+    expect(receiver, contains('OtyaTransferAndroid.availableBytes'));
+    expect(receiver, contains('InsufficientTransferStorageException'));
+    expect(
+      receiver.indexOf('OtyaTransferAndroid.availableBytes'),
+      lessThan(receiver.indexOf('sink = saveFile.openWrite')),
+    );
+    expect(bridge, contains("'availableBytes'"));
+    expect(android, contains('"availableBytes" -> availableBytes(call, result)'));
+    expect(android, contains('StatFs(target.absolutePath).availableBytes'));
   });
 
   test('Send selection is multi-item and survives Videos Music switching', () {
