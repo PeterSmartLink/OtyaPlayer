@@ -651,8 +651,13 @@ class _VideoThumbState extends State<_VideoThumb> {
               ? Image.file(
                   File(_path!),
                   fit: BoxFit.cover,
-                  cacheWidth: 480,
-                  filterQuality: FilterQuality.low,
+                  // Native v2 thumbnails are 720px wide. Decode near the
+                  // source size and use balanced filtering so HD local media
+                  // remains crisp without forcing full-resolution frames into
+                  // scrolling-list memory.
+                  cacheWidth: 720,
+                  filterQuality: FilterQuality.medium,
+                  gaplessPlayback: true,
                   errorBuilder: (_, __, ___) => _placeholder(context),
                 )
               : _placeholder(context),
