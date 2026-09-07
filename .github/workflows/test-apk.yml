@@ -89,6 +89,26 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # Bootstrap evidence for the missing application lockfile. Once the
+      # generated lock is committed, this temporary artifact step is replaced
+      # by a strict `pub get` no-drift check.
+      - name: Capture resolved dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s pubspec.lock || { echo 'ERROR: flutter pub get did not create pubspec.lock'; exit 1; }
+          mkdir -p build/dependency-evidence
+          cp pubspec.lock build/dependency-evidence/pubspec.lock
+          sha256sum pubspec.lock > build/dependency-evidence/pubspec-lock.sha256
+
+      - name: Save dependency lock candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: Otya-dependency-lock-candidate
+          if-no-files-found: error
+          retention-days: 1
+          path: build/dependency-evidence/**
+
       - name: Generate code
         run: dart run build_runner build --delete-conflicting-outputs
 
