@@ -22,6 +22,7 @@ import '../../together/application/nearby_together_session.dart';
 import '../../together/presentation/nearby_together_host_sheet.dart';
 import '../../together/presentation/nearby_together_join_sheet.dart';
 import '../../together/presentation/nearby_together_live_surface.dart';
+import '../../together/presentation/together_ambient_overlay.dart';
 import '../../transfer/data/transfer_security_policy.dart';
 import 'queue_screen.dart';
 import 'widgets/video_gesture_layer.dart';
@@ -977,6 +978,11 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
                   ),
                 ),
               ),
+            ),
+          if (!_isLocked)
+            TogetherAmbientOverlay(
+              controlsVisible: _controlsVisible,
+              onOpenConversation: () => unawaited(_showActiveTogetherRoom()),
             ),
           if (_isLocked)
             VideoPlayerLockOverlay(
