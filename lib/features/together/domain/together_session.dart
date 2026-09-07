@@ -16,6 +16,10 @@ enum TogetherConnectionPath {
   /// Same Wi-Fi, hotspot, or other local peer path. Internet is not required.
   nearby,
 
+  /// An encrypted internet peer path whose selected ICE route has not been
+  /// classified as direct or relayed yet.
+  internet,
+
   /// Direct peer-to-peer path across the internet.
   directInternet,
 
