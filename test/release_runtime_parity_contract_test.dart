@@ -26,7 +26,8 @@ void main() {
     }
   });
 
-  test('every publication path shares one Android runtime configuration', () {
+  test('debug and every publication path share one Android runtime config', () {
+    final debug = File('.github/workflows/test-apk.yml').readAsStringSync();
     final validation = File('.github/workflows/release-mode-validation.yml')
         .readAsStringSync();
     final direct =
@@ -36,14 +37,15 @@ void main() {
     final release = File('.github/workflows/release.yml').readAsStringSync();
     final shared = File('scripts/android-release-config.sh').readAsStringSync();
 
-    for (final workflow in [validation, direct, play, release]) {
+    for (final workflow in [debug, validation, direct, play, release]) {
       expect(
         workflow,
         contains('scripts/android-release-config.sh'),
-        reason: 'Release workflows must not maintain private copies of Firebase/Google runtime defines.',
+        reason: 'Android workflows must not maintain private copies of Firebase/Google runtime defines.',
       );
     }
 
+    expect(debug, contains("OTYA_SELF_UPDATE: 'true'"));
     expect(validation, contains("OTYA_SELF_UPDATE: 'true'"));
     expect(direct, contains("OTYA_SELF_UPDATE: 'true'"));
     expect(play, contains("OTYA_SELF_UPDATE: 'false'"));
@@ -78,5 +80,26 @@ void main() {
     expect(verifier, contains('NEARBY_WIFI_DEVICES'));
     expect(verifier, contains('OtyaTransferAndroidPlugin'));
     expect(verifier, contains('dex packages --defined-only'));
+  });
+
+  test('Now Playing retries a failed Android media-session startup', () {
+    final main = File('lib/main.dart').readAsStringSync();
+    final handler =
+        File('lib/core/services/audio_handler.dart').readAsStringSync();
+    final notification =
+        File('lib/core/services/media_notification_service.dart')
+            .readAsStringSync();
+
+    expect(
+      main,
+      contains('configureEnsureReady(_ensurePlaybackPlatform)'),
+      reason: 'The playback service needs a process-level recovery entry point.',
+    );
+    expect(main, contains('Future<void> _ensurePlaybackPlatform()'));
+    expect(main, contains('_playbackPlatformInit'));
+    expect(handler, contains('Future<bool> ensureReady() async'));
+    expect(handler, contains('_ensureReadyFuture'));
+    expect(notification, contains('AudioHandlerSingleton.instance.ensureReady()'));
+    expect(notification, contains('await _ensureMediaSession();'));
   });
 }
