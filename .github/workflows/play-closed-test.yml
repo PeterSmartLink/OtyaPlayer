@@ -23,7 +23,7 @@ jobs:
 
     steps:
       - name: Checkout current main
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: refs/heads/main
@@ -74,7 +74,7 @@ jobs:
           fi
 
       - name: Set up Java 17
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
@@ -177,7 +177,7 @@ jobs:
           sha256sum "$AAB" | tee "$CHECKSUM"
 
       - name: Save Play closed-test bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Otya-Play-closed-test
           if-no-files-found: error

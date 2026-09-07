@@ -107,7 +107,7 @@ jobs:
           swap-storage: true
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && 'refs/heads/main' || github.ref }}
@@ -164,7 +164,7 @@ jobs:
           }
 
       - name: Set up Java 17
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
@@ -178,7 +178,7 @@ jobs:
           cache: true
 
       - name: Cache Pub packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.pub-cache
           key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
@@ -347,7 +347,7 @@ jobs:
           echo "aab_signing=$AAB_REPORT" >> "$GITHUB_OUTPUT"
 
       - name: Save Otya release files
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Otya-${{ steps.release.outputs.tag }}
           if-no-files-found: error
@@ -378,7 +378,7 @@ jobs:
         run: bash scripts/publish_r2.sh
 
       - name: Create Otya release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.release.outputs.tag }}
           name: Otya ${{ steps.release.outputs.tag }}
