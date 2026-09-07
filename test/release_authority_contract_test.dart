@@ -11,7 +11,10 @@ void main() {
     expect(source, isNot(contains('Align v1.0.0 tag to verified main')));
     expect(source, contains(r'TAG_SHA="$(git rev-list -n 1 "$RELEASE_TAG")"'));
     expect(source, contains(r'test "$TAG_SHA" = "$MAIN_SHA"'));
-    expect(source, contains('immutable tag $RELEASE_TAG does not point to current main'));
+    expect(
+      source,
+      contains(r'immutable tag $RELEASE_TAG does not point to current main'),
+    );
     expect(source, contains("- 'v1.0.0+*'"));
   });
 }
