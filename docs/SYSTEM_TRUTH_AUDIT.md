@@ -4,7 +4,7 @@ This document records the cross-feature seams that must agree before an Otya bui
 
 ## Video input ownership
 
-The video surface has one pointer owner for hidden-state gestures. `VideoGestureLayer` handles tap-to-show controls, left-edge brightness, right-edge volume, edge double-tap seek, horizontal seek and hold-for-speed. No invisible full-screen tap detector may sit above it and consume the first swipe.
+The video surface has one pointer owner for hidden-state gestures. `VideoGestureLayer` handles tap-to-toggle controls, left-edge brightness, right-edge volume, edge double-tap seek, horizontal seek and hold-for-speed. No invisible full-screen tap detector may sit above it and consume the first swipe. When controls are visible, only the actual control regions should consume input; empty video areas must remain available to the underlying gesture surface.
 
 ## First-party browser boundary
 
