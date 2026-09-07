@@ -1,0 +1,41 @@
+name: Apply Otya system truth pass
+
+on:
+  push:
+    branches:
+      - fix/publish-visible-new-way-20260906
+    paths:
+      - scripts/apply_system_truth_pass.py
+      - .github/workflows/apply-system-truth-pass.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out recovery branch
+        uses: actions/checkout@v6
+        with:
+          ref: fix/publish-visible-new-way-20260906
+          fetch-depth: 0
+
+      - name: Apply system truth pass
+        run: python3 scripts/apply_system_truth_pass.py
+
+      - name: Remove one-time migration helpers
+        run: |
+          rm scripts/apply_system_truth_pass.py
+          rm .github/workflows/apply-system-truth-pass.yml
+
+      - name: Commit system fixes
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: align gestures browser and release truth"
+          git push origin HEAD:fix/publish-visible-new-way-20260906
