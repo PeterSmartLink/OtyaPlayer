@@ -136,7 +136,7 @@ void main() {
       expect(updateService, contains('downloadUrl: pageUrl'));
       expect(
         updateService,
-        contains("tagBuild != serverVersionCode"),
+        contains('tagBuild != serverVersionCode'),
         reason: 'An update must bind its immutable tag build to versionCode.',
       );
     });
