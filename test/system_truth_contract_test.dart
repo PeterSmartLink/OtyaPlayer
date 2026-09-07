@@ -15,10 +15,21 @@ void main() {
     expect(gestures, contains('final VoidCallback? onTap;'));
     expect(gestures, contains('onTap: widget.onTap'));
     expect(player, contains('void _toggleControlsVisibility()'));
-    expect(player, isNot(contains('behavior: HitTestBehavior.translucent,\n                  onTap: _resetHideTimer')));
     expect(
       player,
-      isNot(contains("if (!_controlsVisible && !_isLocked)\n            Positioned.fill(")),
+      isNot(
+        contains(
+          'behavior: HitTestBehavior.translucent,\n                  onTap: _resetHideTimer',
+        ),
+      ),
+    );
+    expect(
+      player,
+      isNot(
+        contains(
+          'if (!_controlsVisible && !_isLocked)\n            Positioned.fill(',
+        ),
+      ),
     );
   });
 
@@ -45,11 +56,22 @@ void main() {
     final dialog = File('lib/core/widgets/update_dialog.dart').readAsStringSync();
 
     expect(updates, contains("data['published'] != true"));
-    expect(updates, contains("r'^v(\\d+\\.\\d+\\.\\d+)\\+([1-9]\\d*)\$'"));
+    expect(
+      updates,
+      contains("r'^v(\\d+\\.\\d+\\.\\d+)\\+([1-9]\\d*)\$'"),
+    );
     expect(updates, contains('tagMatch.group(1) != serverVersion'));
     expect(updates, contains('tagBuild != serverVersionCode'));
-    expect(updates, contains("final exactKey = abi == 'arm64' ? 'exactArm64' : 'exactArm32'"));
-    expect(updates, contains('Updates for this build are managed by Google Play.'));
+    expect(
+      updates,
+      contains(
+        "final exactKey = abi == 'arm64' ? 'exactArm64' : 'exactArm32'",
+      ),
+    );
+    expect(
+      updates,
+      contains('Updates for this build are managed by Google Play.'),
+    );
     expect(dialog, contains("router.push(\n      '/webview'"));
     expect(dialog, isNot(contains('LaunchMode.externalApplication')));
   });
