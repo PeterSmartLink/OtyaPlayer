@@ -109,6 +109,28 @@ class MediaNotificationService {
     }
   }
 
+  Uri? _cachedArtworkFor(String id) {
+    final key = _lastArtworkKey;
+    if (key == null || !key.startsWith('$id|')) return null;
+    return _lastArtworkUri;
+  }
+
+  void _publishNowPlaying({
+    required String id,
+    required String title,
+    required String artist,
+    required bool isPlaying,
+    Uri? artUri,
+  }) {
+    AudioHandlerSingleton.instance.setMediaItem(
+      id: id,
+      title: title,
+      artist: artist,
+      artUri: artUri,
+    );
+    AudioHandlerSingleton.instance.setPlaying(isPlaying);
+  }
+
   Future<void> show({
     required String id,
     required String title,
@@ -119,15 +141,32 @@ class MediaNotificationService {
     final generation = ++_metadataGeneration;
     if (!_initialized) await init();
     await _ensureMediaSession();
-    final artUri = await _stableArtUri(albumArtPath, id);
     if (generation != _metadataGeneration) return;
+
+    // Notification/lock-screen controls are the primary contract. Publish them
+    // immediately and never make them wait for album-art file IO, MediaStore
+    // resolution or a remote artwork request. If this track already has cached
+    // artwork, reuse it in the first update.
+    _publishNowPlaying(
+      id: id,
+      title: title,
+      artist: artist,
+      isPlaying: isPlaying,
+      artUri: _cachedArtworkFor(id),
+    );
+
+    final artUri = await _stableArtUri(albumArtPath, id);
+    if (generation != _metadataGeneration || artUri == null) return;
+
+    // Artwork is a progressive enhancement. Do not write the old isPlaying
+    // value again here because playback may have changed while artwork loaded;
+    // the player stream remains authoritative for current play/pause state.
     AudioHandlerSingleton.instance.setMediaItem(
       id: id,
       title: title,
       artist: artist,
       artUri: artUri,
     );
-    AudioHandlerSingleton.instance.setPlaying(isPlaying);
   }
 
   Future<void> showWithBitmap({
@@ -140,6 +179,16 @@ class MediaNotificationService {
     final generation = ++_metadataGeneration;
     if (!_initialized) await init();
     await _ensureMediaSession();
+    if (generation != _metadataGeneration) return;
+
+    _publishNowPlaying(
+      id: id,
+      title: title,
+      artist: artist,
+      isPlaying: isPlaying,
+      artUri: _cachedArtworkFor(id),
+    );
+
     Uri? artUri;
     try {
       final dir = await _artworkDir();
@@ -151,14 +200,13 @@ class MediaNotificationService {
     } catch (e) {
       debugPrint('[MediaNotification] bitmap cache failed: $e');
     }
-    if (generation != _metadataGeneration) return;
+    if (generation != _metadataGeneration || artUri == null) return;
     AudioHandlerSingleton.instance.setMediaItem(
       id: id,
       title: title,
       artist: artist,
       artUri: artUri,
     );
-    AudioHandlerSingleton.instance.setPlaying(isPlaying);
   }
 
   Future<void> updatePlayState(bool isPlaying) async {
