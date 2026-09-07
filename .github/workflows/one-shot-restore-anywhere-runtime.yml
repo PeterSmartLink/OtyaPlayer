@@ -18,13 +18,15 @@ jobs:
           fetch-depth: 0
       - name: Restore audited Anywhere runtime only
         env:
-          EXPECTED_PARENT: 669433bf7db9e581c4af158ec7ea6350a97cc0a2
+          EXPECTED_PARENT: 6d735a3bd5efbb3f7864d5a2009328e9ec7f22b7
           SOURCE_COMMIT: d1500b79413c79edf775f7a3420e03abf6c5d769
           TARGET: lib/features/together/application/anywhere_together_runtime.dart
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD^)" = "$EXPECTED_PARENT"
+          test ! -e "$TARGET"
+          git fetch --no-tags origin "$SOURCE_COMMIT"
           git cat-file -e "$SOURCE_COMMIT^{commit}"
           git cat-file -e "$SOURCE_COMMIT:$TARGET"
           mkdir -p "$(dirname "$TARGET")"
