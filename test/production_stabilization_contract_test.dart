@@ -55,6 +55,17 @@ void main() {
     expect(updates, contains('UpdateCheckState.updateAvailable'));
   });
 
+  test('direct self-update accepts only the immutable tagged APK authority', () {
+    final updates = File('lib/core/services/update_service.dart').readAsStringSync();
+
+    expect(updates, contains("'exactArm64' : 'exactArm32'"));
+    expect(updates, contains('_officialExactApk('));
+    expect(updates, contains("uri.path != '/apk/\$abi'"));
+    expect(updates, contains('tagValues.single != tag'));
+    expectNotContains(updates, 'aliasKey');
+    expectNotContains(updates, 'downloads[exactKey] ??');
+  });
+
   test('media refreshes share one in-flight scan without orphaned errors', () {
     final repository =
         File('lib/features/my_space/data/media_repository.dart').readAsStringSync();
