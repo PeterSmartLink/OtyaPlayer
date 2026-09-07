@@ -140,6 +140,16 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
     });
   }
 
+  void _toggleControlsVisibility() {
+    _hideTimer?.cancel();
+    if (!mounted || _isLocked) return;
+    if (_controlsVisible) {
+      setState(() => _controlsVisible = false);
+      return;
+    }
+    _resetHideTimer();
+  }
+
   Future<void> _initOrientationFromVideo() async {
     await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -910,7 +920,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
       body: Stack(
         children: [
           VideoGestureLayer(
-            onTap: _resetHideTimer,
+            onTap: _toggleControlsVisibility,
             onSeek: (delta) {
               if (_player == null) return;
               final next = _position + delta;
@@ -935,10 +945,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
               duration: const Duration(milliseconds: 260),
               child: IgnorePointer(
                 ignoring: !_controlsVisible,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onTap: _resetHideTimer,
-                  child: VideoPlayerControlsOverlay(
+                child: VideoPlayerControlsOverlay(
                     title: _visibleTitle,
                     ccEnabled: _ccEnabled,
                     isMuted: _isMuted,
@@ -969,7 +976,6 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
                     onAspectRatio: _cycleAspectRatio,
                     onPip: _enterPip,
                   ),
-                ),
               ),
             ),
           if (!_isLocked)

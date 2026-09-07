@@ -11,9 +11,11 @@ void main() {
       'lib/features/player/presentation/widgets/video_gesture_layer.dart',
     ).readAsStringSync();
 
-    expect(player, contains('onTap: _resetHideTimer'));
+    expect(player, contains('onTap: _toggleControlsVisibility'));
     expect(gestures, contains('final VoidCallback? onTap;'));
     expect(gestures, contains('onTap: widget.onTap'));
+    expect(player, contains('void _toggleControlsVisibility()'));
+    expect(player, isNot(contains('behavior: HitTestBehavior.translucent,\n                  onTap: _resetHideTimer')));
     expect(
       player,
       isNot(contains("if (!_controlsVisible && !_isLocked)\n            Positioned.fill(")),
