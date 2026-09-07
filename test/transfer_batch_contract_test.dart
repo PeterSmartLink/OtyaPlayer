@@ -28,7 +28,8 @@ void main() {
     expect(receiver, contains("itemUri.queryParameters['t'] != token"));
 
     expect(policy, contains('isAllowedTransferBatchUri'));
-    expect(policy, contains(r"RegExp(r'^/media/[0-9]+$')"));
+    expect(policy, contains('_indexedMediaPathPattern = RegExp('));
+    expect(policy, contains("uri.path == '/media'"));
   });
 
   test('received batches are bounded as a whole and cannot repeat one URL', () {
