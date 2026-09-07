@@ -27,6 +27,7 @@ class OtyaTransferBatchItem {
 /// when a sidecar proves the partial belongs to the same transfer token.
 class MediaReceiver {
   static const int _maxTransferBytes = 16 * 1024 * 1024 * 1024;
+  static const int _maxBatchBytes = 64 * 1024 * 1024 * 1024;
   static const int _maxManifestBytes = 256 * 1024;
   static const int _maxBatchItems = 200;
   static const Set<String> _supportedExtensions = {
@@ -103,6 +104,8 @@ class MediaReceiver {
 
       final token = uri.queryParameters['t'];
       final items = <OtyaTransferBatchItem>[];
+      final seenUrls = <String>{};
+      var totalBatchBytes = 0;
       for (final raw in rawFiles) {
         if (raw is! Map) {
           throw const FormatException('Otya Send batch contains invalid media metadata.');
@@ -124,9 +127,19 @@ class MediaReceiver {
           throw const FormatException('Otya Send batch tried to leave the verified local sender.');
         }
 
+        final normalizedUrl = itemUri.toString();
+        if (!seenUrls.add(normalizedUrl)) {
+          throw const FormatException('Otya Send batch contains a duplicate media URL.');
+        }
+
+        totalBatchBytes += size;
+        if (totalBatchBytes > _maxBatchBytes) {
+          throw const FormatException('Otya Send batch is larger than the safe receive limit.');
+        }
+
         items.add(OtyaTransferBatchItem(
           name: name,
-          url: itemUri.toString(),
+          url: normalizedUrl,
           sizeBytes: size,
         ));
       }
