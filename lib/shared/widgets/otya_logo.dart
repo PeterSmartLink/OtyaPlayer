@@ -1,7 +1,6 @@
 // Canonical Otya brand components.
 //
-// Product surfaces use the same approved Otya mark and cyan/blue identity.
-// Assistant-specific thinking behaviour remains an admin/compatibility concern;
-// it must not introduce a second public logo or color system.
+// Product surfaces use the approved Otya mark and cyan/blue identity.
+// Consumer AI is not part of the Android product surface; privileged Admin AI
+// remains a server-side concern and must not add app-facing assistant widgets.
 export 'otya_logo_v2.dart' hide OtyaThinkingMark;
-export 'otya_ai_mark.dart' show OtyaAiMark, OtyaThinkingMark;
