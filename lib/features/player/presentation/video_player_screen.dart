@@ -106,6 +106,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
         OtyaDatabase.instance.getSeekPosition(widget.mediaItem.id) ??
             Duration.zero;
     _position = _savedPosition;
+    _anywhereTogetherActive = AnywhereTogetherRuntime.instance.active;
     WidgetsBinding.instance.addObserver(this);
     NearbyTogetherRuntime.instance.addListener(_handleTogetherRuntimeChanged);
     AnywhereTogetherRuntime.instance.addListener(
@@ -607,7 +608,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
         _togetherGuestStreamActive = false;
         _positionBeforeTogetherStream = null;
         _position = restorePosition;
-        _duration = widget.mediaItem.duration;
+        _duration = widget.mediaItem.duration ?? Duration.zero;
         _ccEnabled = false;
       });
     } catch (_) {
