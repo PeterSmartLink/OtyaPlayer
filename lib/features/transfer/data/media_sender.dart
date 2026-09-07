@@ -13,6 +13,8 @@ import 'package:flutter/foundation.dart';
 class MediaSender {
   static const int _preferredPort = 8080;
   static const int _chunkBytes = 256 * 1024;
+  static const int _maxTransferBytes = 16 * 1024 * 1024 * 1024;
+  static const int _maxBatchBytes = 64 * 1024 * 1024 * 1024;
   static const int _maxBatchItems = 200;
   static const Set<String> _supportedExtensions = {
     'mp4',
@@ -70,9 +72,18 @@ class MediaSender {
 
     final seen = <String>{};
     final files = <File>[];
+    var totalBatchBytes = 0;
     for (final path in filePaths) {
       if (!seen.add(path)) continue;
-      files.add(await _validatedMediaFile(path));
+      final file = await _validatedMediaFile(path);
+      final length = await file.length();
+      totalBatchBytes += length;
+      if (totalBatchBytes > _maxBatchBytes) {
+        throw const FormatException(
+          'This selection is larger than Otya Send can safely prepare at once.',
+        );
+      }
+      files.add(file);
       if (files.length > _maxBatchItems) {
         throw const FormatException(
           'Otya Send can prepare up to 200 media items at a time.',
@@ -144,6 +155,11 @@ class MediaSender {
     final length = await file.length();
     if (length <= 0) {
       throw FileSystemException('Media file is empty', filePath);
+    }
+    if (length > _maxTransferBytes) {
+      throw const FormatException(
+        'This media file is larger than Otya Send can safely transfer.',
+      );
     }
     return file;
   }
