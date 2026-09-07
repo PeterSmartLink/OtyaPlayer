@@ -21,11 +21,13 @@ import '../../../../core/services/playback_coordinator.dart';
 class VideoGestureLayer extends StatefulWidget {
   final Widget child;
   final void Function(Duration delta)? onSeek;
+  final VoidCallback? onTap;
 
   const VideoGestureLayer({
     super.key,
     required this.child,
     this.onSeek,
+    this.onTap,
   });
 
   @override
@@ -253,6 +255,7 @@ class _VideoGestureLayerState extends State<VideoGestureLayer> {
         Positioned.fill(
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
+            onTap: widget.onTap,
             onDoubleTapDown: (details) =>
                 _handleDoubleTap(details.localPosition, size, safe),
             onPanStart: _onPanStart,

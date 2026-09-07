@@ -48,7 +48,8 @@ void main() {
   test('update checks do not pretend disabled or failed checks mean current', () {
     final updates = File('lib/core/services/update_service.dart').readAsStringSync();
 
-    expectNotContains(updates, 'if (!Environment.selfUpdateEnabled) return null;');
+    expect(updates, contains('if (!Environment.selfUpdateEnabled) {'));
+    expect(updates, contains('Updates for this build are managed by Google Play.'));
     expect(updates, contains('UpdateCheckState.unavailable'));
     expect(updates, contains('UpdateCheckState.current'));
     expect(updates, contains('UpdateCheckState.updateAvailable'));

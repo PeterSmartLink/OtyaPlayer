@@ -1,8 +1,10 @@
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../config/environment.dart';
 import 'push_notification_service.dart';
 
@@ -13,15 +15,25 @@ enum UpdateCheckState {
   updateAvailable,
   unavailable,
   skipped,
+  preRelease,
 }
 
-/// Checks whether a newer version of Otya is available.
-/// Compares the server versionCode against the installed build number.
+/// Checks the canonical public Otya release authority.
+///
+/// A direct PeterSmart Link APK may offer the PeterSmart Link release page.
+/// Google Play builds never sideload from that channel. Release truth comes
+/// from /latest and is accepted only when the server marks it published and
+/// its immutable tag, public version and build number agree.
 class UpdateService {
   UpdateService._();
   static final UpdateService instance = UpdateService._();
 
   static const String _prefLastCheck = 'update_last_check';
+  static final RegExp _releaseTag = RegExp(r'^v(\d+\.\d+\.\d+)\+([1-9]\d*)$');
+  static const Set<String> _officialHosts = {
+    'petersmartlink.com',
+    'www.petersmartlink.com',
+  };
 
   Future<UpdateInfo?>? _checkInFlight;
   bool _checkInFlightForced = false;
@@ -30,7 +42,7 @@ class UpdateService {
 
   UpdateCheckState get lastState => _lastState;
   String? get lastError => _lastError;
-  String get downloadUrl => Environment.downloadUrl;
+  String get downloadUrl => Environment.downloadPageUrl;
 
   Future<UpdateInfo?> checkForUpdate({bool force = false}) async {
     final existing = _checkInFlight;
@@ -38,10 +50,6 @@ class UpdateService {
       final existingWasForced = _checkInFlightForced;
       _lastState = UpdateCheckState.checking;
       final result = await existing;
-
-      // If a manual check arrived while a scheduled check was only skipped by
-      // the 24-hour throttle, honour the manual request after the shared check
-      // completes. Never launch two network checks at the same time.
       if (force && !existingWasForced && _lastState == UpdateCheckState.skipped) {
         return checkForUpdate(force: true);
       }
@@ -65,8 +73,16 @@ class UpdateService {
 
   Future<UpdateInfo?> _doCheckForUpdate({bool force = false}) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      // Google Play owns updates for Play-distributed builds. Do not point a
+      // Play build at a direct APK channel merely because the server has a
+      // newer PeterSmart Link build.
+      if (!Environment.selfUpdateEnabled) {
+        _lastState = UpdateCheckState.skipped;
+        _lastError = 'Updates for this build are managed by Google Play.';
+        return null;
+      }
 
+      final prefs = await SharedPreferences.getInstance();
       if (!force) {
         final lastCheck = prefs.getInt(_prefLastCheck) ?? 0;
         final now = DateTime.now().millisecondsSinceEpoch;
@@ -77,59 +93,86 @@ class UpdateService {
         }
       }
 
+      final packageInfo = await PackageInfo.fromPlatform();
+      final installedCode = int.tryParse(packageInfo.buildNumber) ?? 0;
+
       http.Response? response;
       try {
-        response = await http
-            .get(Uri.parse(Environment.latestUrl))
-            .timeout(const Duration(seconds: 10));
+        response = await http.get(
+          Uri.parse(Environment.latestUrl),
+          headers: const {
+            'Accept': 'application/json',
+            'Cache-Control': 'no-cache',
+          },
+        ).timeout(const Duration(seconds: 10));
       } catch (_) {}
-
-      if (response == null || response.statusCode != 200) {
-        debugPrint('[UpdateService] /latest failed, trying /api/version fallback…');
-        try {
-          response = await http
-              .get(Uri.parse(Environment.apiVersionUrl))
-              .timeout(const Duration(seconds: 10));
-        } catch (_) {}
-      }
 
       if (response == null || response.statusCode != 200) {
         _lastState = UpdateCheckState.unavailable;
         _lastError = response == null
-            ? 'Otya could not reach the update service.'
-            : 'Update service returned HTTP ${response.statusCode}.';
-        debugPrint('[UpdateService] Both update endpoints failed: $_lastError');
+            ? 'Otya could not reach the public release service.'
+            : 'Release service returned HTTP ${response.statusCode}.';
+        debugPrint('[UpdateService] Canonical /latest failed: $_lastError');
         return null;
       }
 
       final decoded = jsonDecode(response.body);
       if (decoded is! Map<String, dynamic>) {
         _lastState = UpdateCheckState.unavailable;
-        _lastError = 'Update service returned invalid data.';
+        _lastError = 'Release service returned invalid data.';
         return null;
       }
       final data = decoded;
+
+      if (data['published'] != true) {
+        _lastState = UpdateCheckState.preRelease;
+        _lastError = 'No public Otya release is published yet.';
+        await prefs.setInt(_prefLastCheck, DateTime.now().millisecondsSinceEpoch);
+        return null;
+      }
+
       final serverVersionCode = (data['versionCode'] as num?)?.toInt() ?? 0;
-      final serverVersion = data['version'] as String? ?? '';
-      final changelog = data['changelog'] as String? ?? '';
+      final serverVersion = (data['version'] as String? ?? '').trim();
+      final tag = (data['tag'] as String? ?? '').trim();
+      final tagMatch = _releaseTag.firstMatch(tag);
+      final tagBuild = tagMatch == null ? 0 : int.tryParse(tagMatch.group(2) ?? '') ?? 0;
+
+      if (serverVersionCode <= 0 ||
+          serverVersion.isEmpty ||
+          tagMatch == null ||
+          tagMatch.group(1) != serverVersion ||
+          tagBuild != serverVersionCode) {
+        _lastState = UpdateCheckState.unavailable;
+        _lastError = 'Published release identity is inconsistent.';
+        return null;
+      }
+
       final rawDownloads = data['downloads'];
       final downloads = rawDownloads is Map<String, dynamic>
           ? rawDownloads
           : <String, dynamic>{};
-
-      if (serverVersionCode <= 0 || serverVersion.isEmpty) {
+      final abi = _detectAbi();
+      if (abi != 'arm64' && abi != 'arm32') {
         _lastState = UpdateCheckState.unavailable;
-        _lastError = 'Update service returned incomplete version data.';
+        _lastError = 'This Android CPU architecture is not supported by the direct update channel.';
+        return null;
+      }
+
+      final exactKey = abi == 'arm64' ? 'exactArm64' : 'exactArm32';
+      final aliasKey = abi == 'arm64' ? 'arm64' : 'arm32';
+      final rawDirect = downloads[exactKey] ?? downloads[aliasKey];
+      final directUrl = _officialHttps(rawDirect);
+      final pageUrl = _officialHttps(downloads['auto']) ??
+          _officialHttps(Environment.downloadPageUrl);
+      if (directUrl == null || pageUrl == null) {
+        _lastState = UpdateCheckState.unavailable;
+        _lastError = 'Published release does not contain a verified Otya download destination.';
         return null;
       }
 
       await prefs.setInt(_prefLastCheck, DateTime.now().millisecondsSinceEpoch);
-
-      final packageInfo = await PackageInfo.fromPlatform();
-      final installedCode = int.tryParse(packageInfo.buildNumber) ?? 0;
-
       debugPrint(
-        '[UpdateService] Installed: $installedCode  Server: $serverVersionCode',
+        '[UpdateService] Installed: $installedCode  Published: $serverVersionCode ($tag)',
       );
 
       if (serverVersionCode <= installedCode) {
@@ -137,18 +180,14 @@ class UpdateService {
         return null;
       }
 
-      final abi = _detectAbi();
-      final directUrl = abi == 'arm64'
-          ? (downloads['arm64'] as String? ?? Environment.arm64DownloadUrl)
-          : (downloads['arm32'] as String? ?? Environment.arm32DownloadUrl);
-
       _lastState = UpdateCheckState.updateAvailable;
       return UpdateInfo(
+        tag: tag,
         version: serverVersion,
         versionCode: serverVersionCode,
         installedCode: installedCode,
-        changelog: changelog,
-        downloadUrl: directUrl,
+        changelog: data['changelog'] as String? ?? '',
+        downloadUrl: pageUrl,
         directUrl: directUrl,
         releaseDate: data['date'] as String? ?? '',
       );
@@ -160,10 +199,21 @@ class UpdateService {
     }
   }
 
+  String? _officialHttps(Object? raw) {
+    if (raw is! String || raw.trim().isEmpty) return null;
+    final uri = Uri.tryParse(raw.trim());
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.userInfo.isNotEmpty ||
+        !_officialHosts.contains(uri.host.toLowerCase())) {
+      return null;
+    }
+    return uri.toString();
+  }
+
   Future<void> checkAndNotify() async {
     final info = await checkForUpdate();
     if (info == null) return;
-
     await PushNotificationService.instance.showUpdateNotification(
       version: info.version,
       releaseNotes: info.changelog,
@@ -171,8 +221,6 @@ class UpdateService {
     );
   }
 
-  /// Defer this update prompt. The regular 24-hour check window remains the
-  /// authority, so choosing Later never suppresses the same release forever.
   Future<void> remindLater(int versionCode) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_prefLastCheck, DateTime.now().millisecondsSinceEpoch);
@@ -183,6 +231,7 @@ class UpdateService {
 }
 
 class UpdateInfo {
+  final String tag;
   final String version;
   final int versionCode;
   final int installedCode;
@@ -192,6 +241,7 @@ class UpdateInfo {
   final String releaseDate;
 
   const UpdateInfo({
+    required this.tag,
     required this.version,
     required this.versionCode,
     required this.installedCode,

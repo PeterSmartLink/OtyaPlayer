@@ -11,7 +11,7 @@ void main() {
       'lib/features/together/presentation/together_ambient_overlay.dart',
     ).readAsStringSync();
 
-    expect(player, contains("together_ambient_overlay.dart"));
+    expect(player, contains('together_ambient_overlay.dart'));
     expect(player, contains('TogetherAmbientOverlay('));
     expect(player, contains('controlsVisible: _controlsVisible'));
     expect(player, contains('_showActiveTogetherRoom()'));

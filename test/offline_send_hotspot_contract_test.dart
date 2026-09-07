@@ -60,7 +60,7 @@ void main() {
     expect(transfer, contains("title: 'Connect to the sender'"));
     expect(transfer, contains("label: 'Videos'"));
     expect(transfer, contains("label: 'Music'"));
-    expect(transfer, contains("Received/$folder"));
+    expect(transfer, contains(r'Received/$folder'));
     expect(transfer, isNot(contains('Local network only')));
     expect(transfer, isNot(contains('Offline network')));
 

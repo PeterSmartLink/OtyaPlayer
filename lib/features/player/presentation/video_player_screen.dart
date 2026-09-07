@@ -910,6 +910,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
       body: Stack(
         children: [
           VideoGestureLayer(
+            onTap: _resetHideTimer,
             onSeek: (delta) {
               if (_player == null) return;
               final next = _position + delta;
@@ -928,14 +929,6 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
               onPlayerReady: _attachPlayer,
             ),
           ),
-          if (!_controlsVisible && !_isLocked)
-            Positioned.fill(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: _resetHideTimer,
-                child: const SizedBox.expand(),
-              ),
-            ),
           if (!_isLocked)
             AnimatedOpacity(
               opacity: _controlsVisible ? 1.0 : 0.0,
