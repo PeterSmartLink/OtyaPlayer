@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -7,8 +8,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../core/models/media_item.dart';
+import '../../../core/services/audio_session_service.dart';
+import '../../../core/services/media_notification_service.dart';
 import '../../../shared/widgets/album_art_thumb.dart';
 import 'audio_player_screen.dart';
+import 'queue_screen.dart';
 
 final miniPlayerItemProvider = StateProvider<MediaItem?>((_) => null);
 
@@ -26,9 +30,9 @@ final _miniDurationProvider = Provider<Duration>((ref) {
 
 /// Persistent Now Playing surface used across the app.
 ///
-/// The shell owns device bottom insets. This surface intentionally does not add
-/// another safe-area offset: on phones it must sit immediately above Video ·
-/// Music · Me instead of floating a second navigation-height above it.
+/// It follows playback across Video · Music · Me so changing tabs never kills
+/// audio. Unlike the old implementation it also has an explicit close action:
+/// closing means "stop showing/playing this item", not merely hide the card.
 class MiniPlayer extends ConsumerStatefulWidget {
   const MiniPlayer({super.key});
 
@@ -72,13 +76,11 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
   void _dismiss() {
     HapticFeedback.lightImpact();
     ref.read(audioPlayerProvider.notifier).pause();
+    ref.read(queueProvider.notifier).clear();
     ref.read(miniPlayerItemProvider.notifier).state = null;
-    setState(() => _dragOffset = 0);
-  }
-
-  void _skipNext() {
-    HapticFeedback.selectionClick();
-    ref.read(audioPlayerProvider.notifier).skipNext();
+    unawaited(MediaNotificationService.instance.dismiss());
+    unawaited(AudioSessionService.instance.deactivate());
+    if (mounted) setState(() => _dragOffset = 0);
   }
 
   @override
@@ -225,18 +227,18 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                                 ),
                               ),
                             ),
+                            const _PlayPauseButton(),
                             IconButton(
-                              tooltip: 'Next',
+                              tooltip: 'Close player',
                               visualDensity: VisualDensity.compact,
-                              onPressed: _skipNext,
+                              onPressed: _dismiss,
                               icon: const Icon(
-                                Icons.skip_next_rounded,
+                                Icons.close_rounded,
                                 color: AppColors.textSecondary,
-                                size: 22,
+                                size: 21,
                               ),
                             ),
-                            const _PlayPauseButton(),
-                            const SizedBox(width: 5),
+                            const SizedBox(width: 2),
                           ],
                         ),
                       ),
