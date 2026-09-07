@@ -46,8 +46,9 @@ void main() {
     expect(release, contains("- 'v1.0.0+*'"));
     expect(release, contains(r'^v1\.0\.0\+[1-9][0-9]*$'));
     expect(release, contains(r'^1\.0\.0\+[1-9][0-9]*$'));
-    expect(release, contains('EXPECTED_APP_VERSION='));
-    expect(release, contains('exactly match pubspec build'));
+    expect(release, contains('APP_VERSION='));
+    expect(release, contains(r'test "$APP_VERSION" = "${RELEASE_TAG#v}"'));
+    expect(release, contains('does not exactly match pubspec version'));
     expect(release, isNot(contains("test \"\$TAG\" = 'v1.0.0'")));
     expect(release, contains('actions/checkout@v6'));
   });
