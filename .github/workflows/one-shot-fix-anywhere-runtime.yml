@@ -1,0 +1,40 @@
+name: One-shot fix Anywhere runtime
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/one-shot-fix-anywhere-runtime.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Remove audited dead runtime field only
+        env:
+          EXPECTED_PARENT: 119b54c784c800d93189f2d6649ff5e130babc5d
+          TARGET: lib/features/together/application/anywhere_together_runtime.dart
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_PARENT"
+          test "$(grep -c '_remoteRoom' "$TARGET")" = 4
+          sed -i \
+            -e '/^  TogetherRemoteRoom? _remoteRoom;$/d' \
+            -e '/^      _remoteRoom = creation\.room;$/d' \
+            -e '/^      _remoteRoom = remoteRoom;$/d' \
+            -e '/^    _remoteRoom = null;$/d' \
+            "$TARGET"
+          ! grep -q '_remoteRoom' "$TARGET"
+          rm .github/workflows/one-shot-fix-anywhere-runtime.yml
+          git config user.name 'PeterSmart Link'
+          git config user.email 'petersmartlink@gmail.com'
+          git add "$TARGET" .github/workflows/one-shot-fix-anywhere-runtime.yml
+          git commit -m 'fix(together): remove dead Anywhere room field'
+          git push origin HEAD:main
