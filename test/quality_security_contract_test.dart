@@ -27,8 +27,12 @@ void main() {
     ).readAsStringSync();
 
     expect(receiver, contains('isAllowedTransferUri(uri)'));
-    expect(policy, contains("uri.scheme != 'http'"));
-    expect(policy, contains("uri.path != '/media'"));
+    expect(policy, contains("uri.scheme == 'http'"));
+    expect(
+      policy,
+      contains("uri.path == '/media' || _indexedMediaPathPattern.hasMatch(uri.path)"),
+    );
+    expect(policy, contains("uri.path != '/batch'"));
     expect(policy, contains("RegExp(r'^[a-f0-9]{64}\$')"));
     expect(policy, contains('(a == 192 && b == 168)'));
   });
