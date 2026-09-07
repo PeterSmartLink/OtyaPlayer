@@ -14,6 +14,7 @@ import '../../../app/theme/app_colors.dart';
 import '../../../core/models/media_item.dart';
 import '../../../core/models/vault_item.dart';
 import '../../../core/services/vault_service.dart';
+import '../../../shared/widgets/wallpaper_scaffold.dart';
 import '../../player/presentation/mini_player.dart';
 import '../../player/presentation/queue_screen.dart';
 
@@ -133,8 +134,9 @@ class _VaultLockScreenState extends ConsumerState<VaultLockScreen>
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) ref.read(vaultUnlockedProvider.notifier).state = false;
       },
-      child: Scaffold(
+      child: WallpaperScaffold(
         appBar: AppBar(
+          backgroundColor: Colors.transparent,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_rounded),
             onPressed: () =>
@@ -153,25 +155,30 @@ class _VaultLockScreenState extends ConsumerState<VaultLockScreen>
                   height: 92,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppColors.cardOf(context),
+                    gradient: LinearGradient(
+                      colors: [
+                        AppColors.brandBlue.withValues(alpha: .24),
+                        AppColors.brandCyan.withValues(alpha: .10),
+                      ],
+                    ),
                     border: Border.all(
-                      color: AppColors.accent.withValues(alpha: .45),
+                      color: AppColors.brandCyan.withValues(alpha: .32),
                     ),
                   ),
                   child: const Icon(
                     Icons.lock_rounded,
                     size: 42,
-                    color: AppColors.accent,
+                    color: AppColors.brandCyan,
                   ),
                 ),
                 const SizedBox(height: 22),
                 const Text(
-                  'OTYA Private',
+                  'Otya Private',
                   style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900),
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Protected media stays inside OTYA app-private storage until you restore it.',
+                  'Protected media stays inside Otya app-private storage until you restore it.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     height: 1.45,
@@ -389,7 +396,6 @@ Future<bool> _verifyPin(String pin) async {
   if (stored == null) return false;
 
   if (!stored.contains(':')) {
-    // Migrate the original unsalted SHA-256 format after the next successful unlock.
     final legacy = sha256.convert(utf8.encode(pin)).toString();
     final ok = _constantTimeEqual(stored, legacy);
     if (ok) await _savePin(pin);
@@ -416,6 +422,9 @@ bool _constantTimeEqual(String a, String b) {
   return diff == 0;
 }
 
+enum _PrivateView { files, folders }
+enum _PrivateMediaFilter { all, videos, music }
+
 class _PrivateLibrary extends ConsumerStatefulWidget {
   const _PrivateLibrary();
 
@@ -429,6 +438,8 @@ class _PrivateLibraryState extends ConsumerState<_PrivateLibrary>
   int _size = 0;
   bool _loading = true;
   String? _message;
+  _PrivateView _view = _PrivateView.files;
+  _PrivateMediaFilter _filter = _PrivateMediaFilter.all;
 
   @override
   void initState() {
@@ -451,7 +462,8 @@ class _PrivateLibraryState extends ConsumerState<_PrivateLibrary>
   }
 
   Future<void> _refresh() async {
-    final items = VaultService.instance.getAllItems();
+    final items = VaultService.instance.getAllItems()
+      ..sort((a, b) => b.lockedAt.compareTo(a.lockedAt));
     final size = await VaultService.instance.getVaultSize();
     if (!mounted) return;
     setState(() {
@@ -461,17 +473,45 @@ class _PrivateLibraryState extends ConsumerState<_PrivateLibrary>
     });
   }
 
+  String _name(VaultItem item) =>
+      item.originalPath.replaceAll('\\', '/').split('/').last;
+
+  String _folder(VaultItem item) {
+    final normalized = item.originalPath.replaceAll('\\', '/');
+    final parts = normalized.split('/').where((part) => part.isNotEmpty).toList();
+    return parts.length > 1 ? parts[parts.length - 2] : 'Other';
+  }
+
+  List<VaultItem> get _filteredItems => switch (_filter) {
+        _PrivateMediaFilter.all => _items,
+        _PrivateMediaFilter.videos =>
+          _items.where((item) => item.mediaType == 'video').toList(),
+        _PrivateMediaFilter.music =>
+          _items.where((item) => item.mediaType != 'video').toList(),
+      };
+
+  Map<String, List<VaultItem>> get _folders {
+    final folders = <String, List<VaultItem>>{};
+    for (final item in _filteredItems) {
+      folders.putIfAbsent(_folder(item), () => <VaultItem>[]).add(item);
+    }
+    return Map.fromEntries(
+      folders.entries.toList()
+        ..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase())),
+    );
+  }
+
   Future<void> _restore(VaultItem item) async {
     setState(() => _message = null);
     try {
       await VaultService.instance.unlockItem(item.mediaId);
       await _refresh();
       if (mounted) {
-        setState(() => _message = 'Restored to its original folder.');
+        setState(() => _message = 'Restored to ${_folder(item)}.');
       }
     } catch (_) {
       if (mounted) {
-        setState(() => _message = 'OTYA could not restore that file.');
+        setState(() => _message = 'Otya could not restore that file.');
       }
     }
   }
@@ -482,7 +522,7 @@ class _PrivateLibraryState extends ConsumerState<_PrivateLibrary>
       builder: (dialogContext) => AlertDialog(
         title: const Text('Delete protected file?'),
         content: const Text(
-          'This permanently removes the copy stored in OTYA Private. It cannot be restored after deletion.',
+          'This permanently removes the copy stored in Otya Private. It cannot be restored after deletion.',
         ),
         actions: [
           TextButton(
@@ -502,8 +542,7 @@ class _PrivateLibraryState extends ConsumerState<_PrivateLibrary>
       await _refresh();
     } catch (_) {
       if (mounted) {
-        setState(() => _message =
-            'OTYA could not delete that protected file.');
+        setState(() => _message = 'Otya could not delete that protected file.');
       }
     }
   }
@@ -517,7 +556,7 @@ class _PrivateLibraryState extends ConsumerState<_PrivateLibrary>
       }
       return;
     }
-    final fileName = item.originalPath.replaceAll('\\', '/').split('/').last;
+    final fileName = _name(item);
     final media = MediaItem(
       id: 'private:${item.mediaId}',
       title: fileName.replaceFirst(RegExp(r'\.[^.]+$'), ''),
@@ -537,148 +576,561 @@ class _PrivateLibraryState extends ConsumerState<_PrivateLibrary>
     }
   }
 
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_rounded),
-            onPressed: () {
-              ref.read(vaultUnlockedProvider.notifier).state = false;
-              context.canPop() ? context.pop() : context.go('/myspace');
-            },
-          ),
-          title: const Text('Private'),
-          actions: [
-            IconButton(
-              tooltip: 'Lock now',
-              onPressed: () =>
-                  ref.read(vaultUnlockedProvider.notifier).state = false,
-              icon: const Icon(Icons.lock_outline_rounded),
+  Future<void> _openFolder(String folder, List<VaultItem> items) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface.withValues(alpha: .98),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetContext) => FractionallySizedBox(
+        heightFactor: .72,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 16, 8, 8),
+              child: Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: AppColors.brandBlue.withValues(alpha: .16),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.folder_rounded,
+                      color: AppColors.brandCyan,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          folder,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        Text(
+                          '${items.length} protected file${items.length == 1 ? '' : 's'}',
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 11.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
+                itemCount: items.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 7),
+                itemBuilder: (_, index) => _PrivateFileRow(
+                  item: items[index],
+                  name: _name(items[index]),
+                  folder: folder,
+                  onPlay: () => _play(items[index]),
+                  onRestore: () async {
+                    Navigator.of(sheetContext).pop();
+                    await _restore(items[index]);
+                  },
+                  onDelete: () async {
+                    Navigator.of(sheetContext).pop();
+                    await _delete(items[index]);
+                  },
+                ),
+              ),
             ),
           ],
         ),
-        body: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : RefreshIndicator(
-                onRefresh: _refresh,
-                child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: EdgeInsets.fromLTRB(
-                    16,
-                    8,
-                    16,
-                    MediaQuery.paddingOf(context).bottom + 28,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = _filteredItems;
+    final folders = _folders;
+    final videoCount = _items.where((item) => item.mediaType == 'video').length;
+    final musicCount = _items.length - videoCount;
+
+    return WallpaperScaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () {
+            ref.read(vaultUnlockedProvider.notifier).state = false;
+            context.canPop() ? context.pop() : context.go('/myspace');
+          },
+        ),
+        title: const Text('Private'),
+        actions: [
+          IconButton(
+            tooltip: 'Lock now',
+            onPressed: () => ref.read(vaultUnlockedProvider.notifier).state = false,
+            icon: const Icon(Icons.lock_outline_rounded),
+          ),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _refresh,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  6,
+                  16,
+                  MediaQuery.paddingOf(context).bottom + 28,
+                ),
+                children: [
+                  _PrivateSummary(
+                    total: _items.length,
+                    videos: videoCount,
+                    music: musicCount,
+                    sizeLabel: _formatBytes(_size),
                   ),
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.cardOf(context),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: AppColors.borderOf(context)),
+                  if (_message != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      _message!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: AppColors.textSecondary),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  _PrivateViewSwitch(
+                    value: _view,
+                    onChanged: (value) {
+                      HapticFeedback.selectionClick();
+                      setState(() => _view = value);
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  _PrivateFilterBar(
+                    value: _filter,
+                    videoCount: videoCount,
+                    musicCount: musicCount,
+                    onChanged: (value) {
+                      HapticFeedback.selectionClick();
+                      setState(() => _filter = value);
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  if (_items.isEmpty)
+                    const _PrivateEmpty()
+                  else if (_view == _PrivateView.files && items.isEmpty)
+                    const _PrivateEmpty(
+                      title: 'Nothing in this category',
+                      subtitle: 'Choose another filter to see your protected media.',
+                    )
+                  else if (_view == _PrivateView.files)
+                    ...items.map(
+                      (item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: _PrivateFileRow(
+                          item: item,
+                          name: _name(item),
+                          folder: _folder(item),
+                          onPlay: () => _play(item),
+                          onRestore: () => _restore(item),
+                          onDelete: () => _delete(item),
+                        ),
                       ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.shield_rounded,
-                            color: AppColors.accent,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              '${_items.length} protected file${_items.length == 1 ? '' : 's'}',
-                            ),
-                          ),
-                          Text(
-                            _formatBytes(_size),
-                            style: const TextStyle(
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
+                    )
+                  else if (folders.isEmpty)
+                    const _PrivateEmpty(
+                      title: 'No folders here',
+                      subtitle: 'Choose another media filter.',
+                    )
+                  else
+                    ...folders.entries.map(
+                      (entry) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: _PrivateFolderRow(
+                          name: entry.key,
+                          items: entry.value,
+                          onTap: () => _openFolder(entry.key, entry.value),
+                        ),
                       ),
                     ),
-                    if (_message != null) ...[
-                      const SizedBox(height: 10),
+                ],
+              ),
+            ),
+    );
+  }
+}
+
+class _PrivateSummary extends StatelessWidget {
+  const _PrivateSummary({
+    required this.total,
+    required this.videos,
+    required this.music,
+    required this.sizeLabel,
+  });
+
+  final int total;
+  final int videos;
+  final int music;
+  final String sizeLabel;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              AppColors.surfaceElevated.withValues(alpha: .90),
+              AppColors.brandDeepBlue.withValues(alpha: .14),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: AppColors.brandCyan.withValues(alpha: .18),
+          ),
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.brandCyan.withValues(alpha: .10),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(
+                    Icons.shield_rounded,
+                    color: AppColors.brandCyan,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        _message!,
-                        textAlign: TextAlign.center,
+                        '$total protected file${total == 1 ? '' : 's'}',
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '$videos videos · $music music',
                         style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 11.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  sizeLabel,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+}
+
+class _PrivateViewSwitch extends StatelessWidget {
+  const _PrivateViewSwitch({required this.value, required this.onChanged});
+
+  final _PrivateView value;
+  final ValueChanged<_PrivateView> onChanged;
+
+  @override
+  Widget build(BuildContext context) => SegmentedButton<_PrivateView>(
+        segments: const [
+          ButtonSegment(
+            value: _PrivateView.files,
+            icon: Icon(Icons.insert_drive_file_outlined),
+            label: Text('Files'),
+          ),
+          ButtonSegment(
+            value: _PrivateView.folders,
+            icon: Icon(Icons.folder_outlined),
+            label: Text('Folders'),
+          ),
+        ],
+        selected: {value},
+        showSelectedIcon: false,
+        onSelectionChanged: (selection) => onChanged(selection.first),
+      );
+}
+
+class _PrivateFilterBar extends StatelessWidget {
+  const _PrivateFilterBar({
+    required this.value,
+    required this.videoCount,
+    required this.musicCount,
+    required this.onChanged,
+  });
+
+  final _PrivateMediaFilter value;
+  final int videoCount;
+  final int musicCount;
+  final ValueChanged<_PrivateMediaFilter> onChanged;
+
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            ChoiceChip(
+              label: Text('All ${videoCount + musicCount}'),
+              selected: value == _PrivateMediaFilter.all,
+              onSelected: (_) => onChanged(_PrivateMediaFilter.all),
+            ),
+            const SizedBox(width: 8),
+            ChoiceChip(
+              avatar: const Icon(Icons.movie_outlined, size: 16),
+              label: Text('Videos $videoCount'),
+              selected: value == _PrivateMediaFilter.videos,
+              onSelected: (_) => onChanged(_PrivateMediaFilter.videos),
+            ),
+            const SizedBox(width: 8),
+            ChoiceChip(
+              avatar: const Icon(Icons.music_note_rounded, size: 16),
+              label: Text('Music $musicCount'),
+              selected: value == _PrivateMediaFilter.music,
+              onSelected: (_) => onChanged(_PrivateMediaFilter.music),
+            ),
+          ],
+        ),
+      );
+}
+
+class _PrivateFileRow extends StatelessWidget {
+  const _PrivateFileRow({
+    required this.item,
+    required this.name,
+    required this.folder,
+    required this.onPlay,
+    required this.onRestore,
+    required this.onDelete,
+  });
+
+  final VaultItem item;
+  final String name;
+  final String folder;
+  final VoidCallback onPlay;
+  final VoidCallback onRestore;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: AppColors.cardOf(context).withValues(alpha: .90),
+        borderRadius: BorderRadius.circular(18),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onPlay,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 9, 6, 9),
+            child: Row(
+              children: [
+                Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: AppColors.brandBlue.withValues(alpha: .13),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    item.mediaType == 'video'
+                        ? Icons.movie_rounded
+                        : Icons.music_note_rounded,
+                    color: AppColors.brandCyan,
+                  ),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$folder · Protected ${_shortDate(item.lockedAt)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 10.8,
                           color: AppColors.textSecondary,
                         ),
                       ),
                     ],
-                    const SizedBox(height: 12),
-                    if (_items.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 70),
-                        child: Column(
-                          children: [
-                            Icon(
-                              Icons.lock_open_rounded,
-                              size: 54,
-                              color: AppColors.textSecondary,
-                            ),
-                            SizedBox(height: 12),
-                            Text(
-                              'Private is empty',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            SizedBox(height: 6),
-                            Text(
-                              'Move media to Private from the player or supported file actions.',
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      ..._items.map((item) {
-                        final name = item.originalPath
-                            .replaceAll('\\', '/')
-                            .split('/')
-                            .last;
-                        return Card(
-                          child: ListTile(
-                            onTap: () => _play(item),
-                            leading: Icon(
-                              item.mediaType == 'video'
-                                  ? Icons.movie_rounded
-                                  : Icons.music_note_rounded,
-                              color: AppColors.accent,
-                            ),
-                            title: Text(
-                              name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle:
-                                Text('Protected ${_shortDate(item.lockedAt)}'),
-                            trailing: PopupMenuButton<String>(
-                              onSelected: (action) {
-                                if (action == 'restore') _restore(item);
-                                if (action == 'delete') _delete(item);
-                              },
-                              itemBuilder: (_) => const [
-                                PopupMenuItem(
-                                  value: 'restore',
-                                  child: Text('Restore to original folder'),
-                                ),
-                                PopupMenuItem(
-                                  value: 'delete',
-                                  child: Text('Delete permanently'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }),
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'Private file actions',
+                  onSelected: (action) {
+                    if (action == 'restore') onRestore();
+                    if (action == 'delete') onDelete();
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: 'restore',
+                      child: Text('Restore to original folder'),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Text('Delete permanently'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+}
+
+class _PrivateFolderRow extends StatelessWidget {
+  const _PrivateFolderRow({
+    required this.name,
+    required this.items,
+    required this.onTap,
+  });
+
+  final String name;
+  final List<VaultItem> items;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final videos = items.where((item) => item.mediaType == 'video').length;
+    final music = items.length - videos;
+    return Material(
+      color: AppColors.cardOf(context).withValues(alpha: .90),
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      AppColors.brandBlue.withValues(alpha: .22),
+                      AppColors.brandCyan.withValues(alpha: .09),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: const Icon(
+                  Icons.folder_rounded,
+                  color: AppColors.brandCyan,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${items.length} files · $videos videos · $music music',
+                      style: const TextStyle(
+                        fontSize: 10.8,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
                   ],
                 ),
               ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.textMuted,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PrivateEmpty extends StatelessWidget {
+  const _PrivateEmpty({
+    this.title = 'Private is empty',
+    this.subtitle =
+        'Move media to Private from the player or supported file actions.',
+  });
+
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 64, horizontal: 24),
+        child: Column(
+          children: [
+            const Icon(
+              Icons.lock_open_rounded,
+              size: 54,
+              color: AppColors.textSecondary,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+          ],
+        ),
       );
 }
 
