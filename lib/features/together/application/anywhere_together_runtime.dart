@@ -69,7 +69,6 @@ class AnywhereTogetherRuntime extends ChangeNotifier {
   AnywhereTogetherInvite? _invite;
   AnywherePlaybackPlan? _guestPlan;
   AnywhereMediaDescriptor? _descriptor;
-  TogetherRemoteRoom? _remoteRoom;
   MediaKitTogetherAdapter? _adapter;
   StreamSubscription<AnywhereTogetherPacket>? _packetSub;
   StreamSubscription<AnywhereTogetherPeerState>? _peerStateSub;
@@ -134,7 +133,6 @@ class AnywhereTogetherRuntime extends ChangeNotifier {
 
       _peer = peer;
       _mediaHost = mediaHost;
-      _remoteRoom = creation.room;
       _descriptor = descriptor;
       _localParticipantId = _participantId(
         creation.room.host,
@@ -216,7 +214,6 @@ class AnywhereTogetherRuntime extends ChangeNotifier {
         role: AnywhereTogetherRole.guest,
       );
       _peer = peer;
-      _remoteRoom = remoteRoom;
       _localParticipantId = _participantId(
         remoteRoom.guest,
         fallback: 'anywhere-guest',
@@ -449,7 +446,6 @@ class AnywhereTogetherRuntime extends ChangeNotifier {
     _invite = null;
     _guestPlan = null;
     _descriptor = null;
-    _remoteRoom = null;
     _adapter = null;
     _localParticipantId = null;
     _descriptorCompleter = null;
