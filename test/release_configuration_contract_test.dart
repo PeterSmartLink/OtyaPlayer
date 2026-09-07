@@ -115,19 +115,29 @@ void main() {
       expect(env, isNot(contains('JAMENDO')));
     });
 
-    test('update notifications use the ABI-specific APK target', () {
+    test('updater selects an ABI-specific immutable APK target', () {
       final updateService =
           File('lib/core/services/update_service.dart').readAsStringSync();
 
       expect(updateService, contains('final abi = _detectAbi();'));
-      expect(updateService, contains('downloads[\'arm64\']'));
-      expect(updateService, contains('downloads[\'arm32\']'));
-      expect(updateService, contains('downloadUrl: directUrl'));
       expect(
         updateService,
-        isNot(contains('downloadUrl:\n            downloads[\'auto\']')),
-        reason: 'The server legacy auto URL may resolve to arm64. Device update '
-            'notifications must use the APK matching the installed app ABI.',
+        contains("final exactKey = abi == 'arm64' ? 'exactArm64' : 'exactArm32'"),
+      );
+      expect(
+        updateService,
+        contains("final aliasKey = abi == 'arm64' ? 'arm64' : 'arm32'"),
+      );
+      expect(
+        updateService,
+        contains('final rawDirect = downloads[exactKey] ?? downloads[aliasKey];'),
+      );
+      expect(updateService, contains('directUrl: directUrl'));
+      expect(updateService, contains('downloadUrl: pageUrl'));
+      expect(
+        updateService,
+        contains("tagBuild != serverVersionCode"),
+        reason: 'An update must bind its immutable tag build to versionCode.',
       );
     });
 
