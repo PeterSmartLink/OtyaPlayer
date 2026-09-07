@@ -72,7 +72,7 @@ jobs:
               -dname 'CN=Android Debug,O=Android,C=US'
           fi
 
-      - name: Build release-mode ARM64 APK with production runtime config
+      - name: Build release-mode ARM64 split APK with production runtime config
         env:
           FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
           OTYA_ALLOW_DEBUG_SIGNING: 'true'
@@ -81,18 +81,25 @@ jobs:
         run: |
           set -euo pipefail
           source scripts/android-release-config.sh
-          flutter build apk --release \
+          flutter build apk --release --split-per-abi \
             --target-platform android-arm64 \
             "${OTYA_RELEASE_DART_DEFINES[@]}"
           mkdir -p build/release-mode-evidence
-          cp build/app/outputs/flutter-apk/app-release.apk build/Otya-release-mode-test.apk
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk build/Otya-release-mode-test.apk
 
-      - name: Verify final release-mode Android binary
+      - name: Verify final release-mode Android binary and size budget
         shell: bash
         run: |
           set -euo pipefail
+          APK=build/Otya-release-mode-test.apk
+          SIZE="$(stat -c%s "$APK")"
+          printf '%s\n' "$SIZE" > build/release-mode-evidence/apk-size-bytes.txt
+          test "$SIZE" -le 40000000 || {
+            echo "ERROR: ARM64 publication-equivalent APK is $SIZE bytes; Otya budget is 40000000 bytes"
+            exit 1
+          }
           bash scripts/verify-android-release-apk.sh \
-            build/Otya-release-mode-test.apk \
+            "$APK" \
             build/release-mode-evidence
 
       - name: Save release-mode evidence
