@@ -17,6 +17,7 @@ import '../../player/presentation/queue_screen.dart';
 import '../../search/smart_search_sheet.dart';
 
 part 'widgets/video_tab_widgets.dart';
+part 'widgets/video_list_widgets.dart';
 
 enum _VideoView { videos, folders, playlists }
 
@@ -121,7 +122,7 @@ class _VideoTabScreenState extends ConsumerState<VideoTabScreen>
           SliverToBoxAdapter(
             child: _SectionHeader(
               title: 'On this device',
-              subtitle: 'Your local videos, ready to play',
+              subtitle: 'Your videos, full-width and easy to scan',
               actionLabel: 'Shuffle',
               actionIcon: Icons.shuffle_rounded,
               onAction: () {
@@ -130,28 +131,16 @@ class _VideoTabScreenState extends ConsumerState<VideoTabScreen>
               },
             ),
           ),
-          SliverLayoutBuilder(
-            builder: (context, constraints) {
-              final columns = _gridColumns(constraints.crossAxisExtent);
-              return SliverPadding(
-                padding: const EdgeInsets.fromLTRB(14, 4, 14, 18),
-                sliver: SliverGrid(
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: columns,
-                    mainAxisSpacing: 14,
-                    crossAxisSpacing: 12,
-                    childAspectRatio: columns >= 3 ? 1.25 : 1.12,
-                  ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) => _VideoCard(
-                      item: videos[index],
-                      onTap: () => _playVideo(context, videos, index),
-                    ),
-                    childCount: videos.length,
-                  ),
-                ),
-              );
-            },
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(14, 4, 14, 18),
+            sliver: SliverList.separated(
+              itemCount: videos.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, index) => _VideoListCard(
+                item: videos[index],
+                onTap: () => _playVideo(context, videos, index),
+              ),
+            ),
           ),
         ] else if (view == _VideoView.folders)
           _folderSliver(context, videos)
@@ -257,35 +246,25 @@ class VideoFolderDetailPage extends ConsumerWidget {
       ),
       body: videos.isEmpty
           ? const Center(child: Text('No videos are available in this folder.'))
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                final columns = _gridColumns(constraints.maxWidth);
-                return GridView.builder(
-                  padding: EdgeInsets.fromLTRB(
-                    14,
-                    10,
-                    14,
-                    MediaQuery.paddingOf(context).bottom + 24,
-                  ),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: columns,
-                    mainAxisSpacing: 14,
-                    crossAxisSpacing: 12,
-                    childAspectRatio: columns >= 3 ? 1.25 : 1.12,
-                  ),
-                  itemCount: videos.length,
-                  itemBuilder: (context, index) => _VideoCard(
-                    item: videos[index],
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      ref
-                          .read(queueProvider.notifier)
-                          .setQueue(videos, startIndex: index);
-                      context.push('/player/video', extra: videos[index]);
-                    },
-                  ),
-                );
-              },
+          : ListView.separated(
+              padding: EdgeInsets.fromLTRB(
+                14,
+                10,
+                14,
+                MediaQuery.paddingOf(context).bottom + 24,
+              ),
+              itemCount: videos.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, index) => _VideoListCard(
+                item: videos[index],
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  ref
+                      .read(queueProvider.notifier)
+                      .setQueue(videos, startIndex: index);
+                  context.push('/player/video', extra: videos[index]);
+                },
+              ),
             ),
     );
   }
