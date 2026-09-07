@@ -132,12 +132,13 @@ void main() {
 
   test('production message invariants reject oversized text and invalid Moments', () {
     final now = DateTime.utc(2026, 9, 5, 12);
+    final oversized = ''.padRight(TogetherMessage.maxTextLength + 1, 'x');
 
     expect(
       () => TogetherMessage(
         id: 'large',
         sessionId: 'room-1',
-        text: 'x' * (TogetherMessage.maxTextLength + 1),
+        text: oversized,
         kind: TogetherMessageKind.text,
         createdAt: now,
       ),
