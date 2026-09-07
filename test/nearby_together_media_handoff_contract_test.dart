@@ -73,22 +73,24 @@ void main() {
     expect(reliableBlock.contains("'pong'"), isFalse);
   });
 
-  test('video queue handoff preserves Together and gives host media control', () {
-    expect(player.contains('await runtime.prepareHostNextMedia(item)'), isTrue);
-    expect(player.contains('runtime.active && runtime.isGuest'), isTrue);
+  test('video queue handoff preserves host authority across Together transports', () {
+    expect(player.contains('await nearby.prepareHostNextMedia(item)'), isTrue);
+    expect(player.contains('nearby.active && nearby.isGuest'), isTrue);
+    expect(player.contains('anywhere.active && anywhere.isGuest'), isTrue);
     expect(
       player.contains(
         'The host chooses the shared video while Together is active.',
       ),
       isTrue,
     );
-    expect(player.contains('_handoffToAnotherVideo = true'), isTrue);
     expect(
       player.contains(
-        'if (NearbyTogetherRuntime.instance.active) {\n      unawaited(NearbyTogetherRuntime.instance.stop())',
+        'Finish the current Anywhere Together video before changing the shared video.',
       ),
-      isFalse,
+      isTrue,
     );
+    expect(player.contains('_handoffToAnotherVideo = true'), isTrue);
+    expect(player.contains('if (!_handoffToAnotherVideo)'), isTrue);
   });
 
   test('failed handoff restores the exact queue index, including shuffle', () {
