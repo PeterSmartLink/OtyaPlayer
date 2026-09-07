@@ -18,6 +18,9 @@ class MediaNotificationService {
   MediaNotificationService._();
   static final MediaNotificationService instance = MediaNotificationService._();
 
+  static const int _maxArtworkBytes = 5 * 1024 * 1024;
+  static const int _maxCachedArtworkFiles = 24;
+
   bool _initialized = false;
   String? _lastArtworkKey;
   Uri? _lastArtworkUri;
@@ -43,27 +46,96 @@ class MediaNotificationService {
     return dir;
   }
 
+  Future<void> _pruneArtworkCache(Directory dir, {String? keepPath}) async {
+    try {
+      final files = <File>[];
+      await for (final entity in dir.list(followLinks: false)) {
+        if (entity is File && !entity.path.endsWith('.part')) files.add(entity);
+      }
+      if (files.length <= _maxCachedArtworkFiles) return;
+
+      final dated = <({File file, DateTime modified})>[];
+      for (final file in files) {
+        try {
+          dated.add((file: file, modified: await file.lastModified()));
+        } catch (_) {}
+      }
+      dated.sort((a, b) => a.modified.compareTo(b.modified));
+      var remaining = files.length;
+      for (final entry in dated) {
+        if (remaining <= _maxCachedArtworkFiles) break;
+        if (entry.file.path == keepPath) continue;
+        try {
+          await entry.file.delete();
+          remaining--;
+        } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('[MediaNotification] artwork cache prune skipped: $e');
+    }
+  }
+
   Future<Uri?> _cacheRemoteArtwork(Uri uri, String id) async {
     final key = '$id|$uri';
     if (_lastArtworkKey == key && _lastArtworkUri != null) {
       return _lastArtworkUri;
     }
+
+    final client = http.Client();
+    File? part;
     try {
-      final response = await http.get(uri).timeout(const Duration(seconds: 6));
-      if (response.statusCode != 200 || response.bodyBytes.isEmpty) return null;
-      if (response.bodyBytes.length > 5 * 1024 * 1024) return null;
+      final request = http.Request('GET', uri);
+      final response = await client.send(request).timeout(const Duration(seconds: 6));
+      if (response.statusCode != HttpStatus.ok) return null;
+
+      final declaredLength = response.contentLength;
+      if (declaredLength != null && declaredLength > _maxArtworkBytes) {
+        return null;
+      }
+
       final contentType = response.headers['content-type'] ?? '';
-      final ext = contentType.contains('png') ? 'png' : 'jpg';
+      if (!contentType.toLowerCase().startsWith('image/')) return null;
+      final ext = contentType.toLowerCase().contains('png') ? 'png' : 'jpg';
       final dir = await _artworkDir();
       final target = File('${dir.path}/now_playing_${id.hashCode}.$ext');
-      await target.writeAsBytes(response.bodyBytes, flush: true);
+      part = File('${target.path}.part');
+      if (await part.exists()) await part.delete();
+
+      final sink = part.openWrite(mode: FileMode.writeOnly);
+      var received = 0;
+      try {
+        await for (final chunk in response.stream) {
+          received += chunk.length;
+          if (received > _maxArtworkBytes) {
+            throw const _ArtworkTooLargeException();
+          }
+          sink.add(chunk);
+        }
+        await sink.flush();
+      } finally {
+        await sink.close();
+      }
+      if (received == 0) return null;
+
+      if (await target.exists()) await target.delete();
+      await part.rename(target.path);
+      part = null;
       final artUri = Uri.file(target.path);
       _lastArtworkKey = key;
       _lastArtworkUri = artUri;
+      await _pruneArtworkCache(dir, keepPath: target.path);
       return artUri;
+    } on _ArtworkTooLargeException {
+      debugPrint('[MediaNotification] remote artwork exceeded safe size limit.');
+      return null;
     } catch (e) {
       debugPrint('[MediaNotification] remote artwork unavailable: $e');
       return null;
+    } finally {
+      client.close();
+      try {
+        if (part != null && await part.exists()) await part.delete();
+      } catch (_) {}
     }
   }
 
@@ -79,6 +151,11 @@ class MediaNotificationService {
 
     final source = File(resolved);
     if (!await source.exists()) return null;
+    try {
+      if (await source.length() > _maxArtworkBytes) return null;
+    } catch (_) {
+      return null;
+    }
 
     final key = '$id|$resolved';
     if (_lastArtworkKey == key && _lastArtworkUri != null) {
@@ -93,6 +170,7 @@ class MediaNotificationService {
       final uri = Uri.file(target.path);
       _lastArtworkKey = key;
       _lastArtworkUri = uri;
+      await _pruneArtworkCache(dir, keepPath: target.path);
       return uri;
     } catch (e) {
       debugPrint('[MediaNotification] artwork cache failed: $e');
@@ -189,6 +267,8 @@ class MediaNotificationService {
       artUri: _cachedArtworkFor(id),
     );
 
+    if (albumArtBytes.isEmpty || albumArtBytes.length > _maxArtworkBytes) return;
+
     Uri? artUri;
     try {
       final dir = await _artworkDir();
@@ -197,6 +277,7 @@ class MediaNotificationService {
       artUri = Uri.file(file.path);
       _lastArtworkKey = '$id|bitmap';
       _lastArtworkUri = artUri;
+      await _pruneArtworkCache(dir, keepPath: file.path);
     } catch (e) {
       debugPrint('[MediaNotification] bitmap cache failed: $e');
     }
@@ -220,4 +301,8 @@ class MediaNotificationService {
     _lastArtworkUri = null;
     AudioHandlerSingleton.instance.clearMediaItem();
   }
+}
+
+class _ArtworkTooLargeException implements Exception {
+  const _ArtworkTooLargeException();
 }
