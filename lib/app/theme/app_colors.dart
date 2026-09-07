@@ -2,16 +2,16 @@ import 'package:flutter/material.dart';
 
 /// Canonical Otya visual system.
 ///
-/// The current Otya product mark is built around luminous cyan flowing into a
-/// strong electric blue on a near-black/navy surface. Functional status colors
-/// remain separate so success, warnings and destructive actions stay clear.
+/// Otya is a luminous navy/cyan/blue product, not a flat black interface.
+/// Dark surfaces retain comfortable media contrast while carrying enough blue
+/// lift that cards, navigation and the flowing brand background remain visible.
 abstract class AppColors {
-  static const Color background = Color(0xFF050812);
-  static const Color surface = Color(0xFF0A1020);
-  static const Color surfaceElevated = Color(0xFF10182A);
-  static const Color surfaceHighlight = Color(0xFF17233A);
-  static const Color border = Color(0xFF213454);
-  static const Color borderSubtle = Color(0xFF152640);
+  static const Color background = Color(0xFF07152D);
+  static const Color surface = Color(0xFF0B1E3A);
+  static const Color surfaceElevated = Color(0xFF102A4D);
+  static const Color surfaceHighlight = Color(0xFF173B66);
+  static const Color border = Color(0xFF285887);
+  static const Color borderSubtle = Color(0xFF173A61);
 
   // Core Otya product identity, sampled from the current cyan/blue mark.
   static const Color brandCyan = Color(0xFF27E8FF);
@@ -32,8 +32,8 @@ abstract class AppColors {
   static const Color accentGreen = Color(0xFF39D98A);
   static const Color accentAmber = brandYellow;
 
-  static const Color glowBlue = Color(0x3D126BFF);
-  static const Color glowViolet = Color(0x3027E8FF);
+  static const Color glowBlue = Color(0x52126BFF);
+  static const Color glowViolet = Color(0x4027E8FF);
 
   static const LinearGradient accentGradient = LinearGradient(
     colors: [brandCyan, brandBlue, brandDeepBlue],
@@ -48,20 +48,20 @@ abstract class AppColors {
   );
 
   static const LinearGradient cardGradient = LinearGradient(
-    colors: [Color(0xFF0A1020), Color(0xFF10182A)],
+    colors: [Color(0xFF0B1E3A), Color(0xFF102A4D)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const LinearGradient darkOverlay = LinearGradient(
-    colors: [Colors.transparent, Color(0xF2050812)],
+    colors: [Colors.transparent, Color(0xD907152D)],
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
   );
 
-  static const Color textPrimary = Color(0xFFF7FAFF);
-  static const Color textSecondary = Color(0xFFB5C2D6);
-  static const Color textMuted = Color(0xFF7E90AA);
+  static const Color textPrimary = Color(0xFFF8FBFF);
+  static const Color textSecondary = Color(0xFFC3D5EA);
+  static const Color textMuted = Color(0xFF8FA8C4);
 
   static const Color error = Color(0xFFFF5B52);
   static const Color success = Color(0xFF39D98A);

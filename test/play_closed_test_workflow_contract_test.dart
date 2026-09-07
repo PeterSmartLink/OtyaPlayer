@@ -15,7 +15,9 @@ void main() {
 
   test('Play closed-test build uses official release bundle settings', () {
     expect(workflow, contains('flutter build appbundle --release'));
-    expect(workflow, contains('--dart-define=SELF_UPDATE=false'));
+    expect(workflow, contains("OTYA_SELF_UPDATE: 'false'"));
+    expect(workflow, contains('source scripts/android-release-config.sh'));
+    expect(workflow, contains(r'"${OTYA_RELEASE_DART_DEFINES[@]}"'));
     expect(workflow, contains('KEYSTORE_BASE64'));
     expect(workflow, contains('jarsigner -verify'));
     expect(workflow, contains('Play AAB certificate does not match the configured Otya signing key'));

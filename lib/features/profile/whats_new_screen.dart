@@ -25,10 +25,15 @@ class _WhatsNewScreenState extends State<WhatsNewScreen> {
     try {
       final info = await UpdateService.instance.checkForUpdate(force: true);
       if (!mounted) return;
+      final service = UpdateService.instance;
       setState(() {
-        _text = info == null || info.changelog.isEmpty
-            ? 'You have the latest available version.'
-            : info.changelog;
+        if (info != null && info.changelog.isNotEmpty) {
+          _text = info.changelog;
+        } else if (service.lastState == UpdateCheckState.current) {
+          _text = 'You have the latest published Otya build.';
+        } else {
+          _text = service.lastError ?? 'No published release notes are available.';
+        }
       });
     } catch (_) {
       if (mounted) setState(() => _error = 'Could not load update information.');

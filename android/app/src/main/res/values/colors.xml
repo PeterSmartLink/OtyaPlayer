@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="background">#FF050812</color>
+    <color name="background">#FF07152D</color>
     <color name="accent">#FF126BFF</color>
-    <color name="otya_launcher_background">#FF050812</color>
+    <color name="otya_launcher_background">#FF07152D</color>
     <!-- FCM default notification accent colour (current Otya cyan) -->
     <color name="notification_color">#27E8FF</color>
 </resources>

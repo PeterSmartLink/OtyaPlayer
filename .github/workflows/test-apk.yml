@@ -86,8 +86,20 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Install dependencies
-        run: flutter pub get
+      - name: Install locked dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s pubspec.lock || { echo 'ERROR: committed pubspec.lock is missing'; exit 1; }
+          BEFORE="$(sha256sum pubspec.lock | awk '{print $1}')"
+          flutter pub get
+          AFTER="$(sha256sum pubspec.lock | awk '{print $1}')"
+          test "$BEFORE" = "$AFTER" || {
+            git diff -- pubspec.lock
+            echo 'ERROR: flutter pub get changed the committed dependency graph'
+            exit 1
+          }
+          git diff --exit-code -- pubspec.lock
 
       - name: Generate code
         run: dart run build_runner build --delete-conflicting-outputs
@@ -106,23 +118,20 @@ jobs:
           set -euo pipefail
           test -n "$FIREBASE_API_KEY" || { echo "ERROR: FIREBASE_API_KEY is missing"; exit 1; }
 
-      - name: Build test APK
+      - name: Build debug test APK with production runtime defines
         env:
           FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          OTYA_SELF_UPDATE: 'true'
         shell: bash
         run: |
           set -euo pipefail
+          source scripts/android-release-config.sh
           flutter build apk --debug \
             --target-platform android-arm64 \
-            --dart-define=SELF_UPDATE=true \
-            --dart-define=GOOGLE_WEB_CLIENT_ID="82776565585-obr8k53b8n6djsggissv8qne81cm3u5u.apps.googleusercontent.com" \
-            --dart-define=FIREBASE_API_KEY="$FIREBASE_API_KEY" \
-            --dart-define=FIREBASE_APP_ID="1:82776565585:android:085cf9b4eecb76e9535570" \
-            --dart-define=FIREBASE_MESSAGING_SENDER_ID="82776565585" \
-            --dart-define=FIREBASE_PROJECT_ID="otya-player"
+            "${OTYA_RELEASE_DART_DEFINES[@]}"
           cp build/app/outputs/flutter-apk/app-debug.apk build/Otya-test.apk
 
-      - name: Verify test APK
+      - name: Verify test APK identity
         shell: bash
         run: |
           set -euo pipefail
@@ -134,6 +143,12 @@ jobs:
           test -x "$APKSIGNER" || { echo "ERROR: Android apksigner was not found"; exit 1; }
           "$APKSIGNER" verify --verbose --print-certs "$APK" | tee build/Otya-test-signing.txt
 
+          APKKIT="$(find "$ANDROID_HOME" -type f -name apkanalyzer -print | sort | tail -n 1)"
+          test -x "$APKKIT" || { echo "ERROR: apkanalyzer was not found"; exit 1; }
+          "$APKKIT" manifest application-id "$APK" | tee build/Otya-test-application-id.txt
+          "$APKKIT" manifest version-name "$APK" | tee build/Otya-test-version-name.txt
+          "$APKKIT" manifest version-code "$APK" | tee build/Otya-test-version-code.txt
+
       - name: Save Otya test APK
         uses: actions/upload-artifact@v4
         with:
@@ -144,3 +159,6 @@ jobs:
             build/Otya-test.apk
             build/Otya-test-checksum.txt
             build/Otya-test-signing.txt
+            build/Otya-test-application-id.txt
+            build/Otya-test-version-name.txt
+            build/Otya-test-version-code.txt

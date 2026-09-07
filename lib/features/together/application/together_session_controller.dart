@@ -169,14 +169,20 @@ class TogetherSessionController {
     final exists = _state.messages.any((item) => item.id == message.id);
     if (exists) return;
 
-    final updated = List<TogetherMessage>.unmodifiable([
+    final combined = <TogetherMessage>[
       ..._state.messages,
       message,
-    ]);
+    ];
+    final overflow = combined.length - TogetherPolicy.maxConversationMessagesV1;
+    final bounded = overflow > 0 ? combined.sublist(overflow) : combined;
+    final nextUnread = conversationVisible ? 0 : _state.unreadMessages + 1;
+    final boundedUnread = nextUnread > TogetherPolicy.maxConversationMessagesV1
+        ? TogetherPolicy.maxConversationMessagesV1
+        : nextUnread;
+
     _state = _state.copyWith(
-      messages: updated,
-      unreadMessages:
-          conversationVisible ? 0 : _state.unreadMessages + 1,
+      messages: List<TogetherMessage>.unmodifiable(bounded),
+      unreadMessages: boundedUnread,
       lastActivityAt: message.createdAt,
     );
   }

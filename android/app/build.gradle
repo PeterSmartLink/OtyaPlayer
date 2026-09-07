@@ -6,6 +6,12 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+// Otya has one canonical app-icon binary. Android launcher resources are
+// generated from the same validated WebP Flutter ships in-app so launcher,
+// splash/header identity and public branding cannot drift independently.
+def otyaBrandSource = file("../../assets/branding/otya_app_icon.webp")
+def generatedOtyaBrandRes = file("${buildDir}/generated/otya-brand-res")
+
 android {
     namespace = "com.otyaplayer.app"
     compileSdk = 36
@@ -22,7 +28,10 @@ android {
     }
 
     sourceSets {
-        main.java.srcDirs += "src/main/kotlin"
+        main {
+            java.srcDirs += "src/main/kotlin"
+            res.srcDir generatedOtyaBrandRes
+        }
     }
 
     defaultConfig {
@@ -90,6 +99,39 @@ android {
             // Production signing material is reserved for release/Play workflows.
         }
     }
+}
+
+tasks.register("prepareOtyaBrandResources") {
+    inputs.file(otyaBrandSource)
+    outputs.dir(generatedOtyaBrandRes)
+
+    doLast {
+        if (!otyaBrandSource.exists() || otyaBrandSource.length() < 12) {
+            throw new GradleException("Canonical Otya app icon is missing or empty: ${otyaBrandSource}")
+        }
+        byte[] header = new byte[12]
+        otyaBrandSource.withInputStream { stream ->
+            if (stream.read(header) != 12) {
+                throw new GradleException("Could not read canonical Otya app icon header")
+            }
+        }
+        if (new String(header, 0, 4, "US-ASCII") != "RIFF" ||
+            new String(header, 8, 4, "US-ASCII") != "WEBP") {
+            throw new GradleException("Canonical Otya app icon is not a WebP container")
+        }
+
+        def drawableDir = new File(generatedOtyaBrandRes, "drawable-nodpi")
+        drawableDir.mkdirs()
+        copy {
+            from otyaBrandSource
+            into drawableDir
+            rename { "otya_launcher_source.webp" }
+        }
+    }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn("prepareOtyaBrandResources")
 }
 
 flutter {

@@ -1,9 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/otya_launcher_background" />
-    <item>
-        <bitmap
-            android:src="@drawable/otya_launcher_foreground_bitmap"
-            android:gravity="fill" />
-    </item>
+    <item android:drawable="@drawable/otya_launcher_foreground" />
 </layer-list>

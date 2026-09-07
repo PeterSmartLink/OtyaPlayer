@@ -27,7 +27,7 @@ void main() {
     );
   });
 
-  test('Android launcher uses adaptive mipmap with the current Otya mark', () {
+  test('Android launcher uses one canonical Otya source everywhere', () {
     final manifest =
         File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
     final adaptive = File(
@@ -35,6 +35,9 @@ void main() {
     ).readAsStringSync();
     final foreground = File(
       'android/app/src/main/res/drawable/otya_launcher_foreground.xml',
+    ).readAsStringSync();
+    final monochrome = File(
+      'android/app/src/main/res/drawable/otya_launcher_monochrome.xml',
     ).readAsStringSync();
 
     expect(manifest, contains('android:icon="@mipmap/ic_launcher"'));
@@ -45,7 +48,13 @@ void main() {
     );
     expect(adaptive, contains('@drawable/otya_launcher_foreground'));
     expect(adaptive, contains('@color/otya_launcher_background'));
-    expect(foreground, contains('@drawable/otya_launcher_foreground_bitmap'));
+    expect(foreground, contains('@drawable/otya_launcher_source'));
+    expect(monochrome, contains('@drawable/otya_launcher_source'));
+    expect(
+      '$foreground\n$monochrome',
+      isNot(contains('@drawable/otya_launcher_foreground_bitmap')),
+      reason: 'No launcher surface may depend on the corrupt legacy PNG.',
+    );
     expect(
       foreground,
       isNot(contains('M160,98 L138,117 L116,146')),

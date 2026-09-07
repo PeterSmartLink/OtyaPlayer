@@ -24,6 +24,9 @@ import 'core/services/storage_folder_service.dart';
 import 'core/services/update_service.dart';
 import 'features/settings/settings_provider.dart';
 
+Future<void>? _playbackPlatformInit;
+bool _playbackPlatformReady = false;
+
 Future<void> main() async {
   await runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
@@ -51,9 +54,6 @@ Future<void> main() async {
 }
 
 Future<void> _bootstrapAfterFirstFrame(SettingsNotifier settingsNotifier) async {
-  // The app gate owns the one startup settings read because privacy/App Lock
-  // must be known before protected content is revealed. Background services
-  // reuse that same result instead of opening SharedPreferences a second time.
   final savedSettings = await settingsNotifier.startupHydration;
 
   var databaseReady = false;
@@ -82,17 +82,18 @@ Future<void> _initBackground(
   AppSettings savedSettings,
   bool databaseReady,
 ) async {
-  // Playback remains the strict first dependency so immediate playback always
-  // has a real Android MediaSession and foreground-service notification.
-  await _safeBackground('playback platform', _initPlaybackPlatform);
+  // Playback is the only startup subsystem that owns a long-lived Android
+  // foreground service. Register a recovery callback before the first attempt:
+  // if release timing/platform startup causes that attempt to fail, the next
+  // Now Playing update can retry instead of leaving playback with no system UI.
+  AudioHandlerSingleton.instance.configureEnsureReady(_ensurePlaybackPlatform);
+  await _safeBackground('playback platform', _ensurePlaybackPlatform);
 
   PipService.listenForNativePause(
     () => PlaybackCoordinator.instance.activePlayer?.pause(),
     () => PlaybackCoordinator.instance.activePlayer?.play(),
   );
 
-  // These initializers are independent after playback setup. Run them together
-  // so readiness is bounded by the slowest service rather than their sum.
   final notificationsReady =
       _safeBackground('notifications', _initNotifications);
   final storageReady =
@@ -149,7 +150,36 @@ Future<void> _initBackground(
   ]);
 }
 
-Future<void> _initPlaybackPlatform() async {
+Future<void> _ensurePlaybackPlatform() {
+  if (_playbackPlatformReady || AudioHandlerSingleton.instance.isReady) {
+    _playbackPlatformReady = true;
+    return Future<void>.value();
+  }
+
+  final existing = _playbackPlatformInit;
+  if (existing != null) return existing;
+
+  final attempt = _initPlaybackPlatformOnce();
+  _playbackPlatformInit = attempt;
+  unawaited(
+    attempt.then<void>(
+      (_) {
+        _playbackPlatformReady = true;
+      },
+      onError: (Object _, StackTrace __) {
+        // _safeBackground/ensureReady report the actual failure. Keep the
+        // service retryable for the next media event.
+      },
+    ).whenComplete(() {
+      if (identical(_playbackPlatformInit, attempt)) {
+        _playbackPlatformInit = null;
+      }
+    }),
+  );
+  return attempt;
+}
+
+Future<void> _initPlaybackPlatformOnce() async {
   MediaKit.ensureInitialized();
 
   await SystemChrome.setPreferredOrientations(const [
@@ -173,15 +203,18 @@ Future<void> _initPlaybackPlatform() async {
     config: AudioServiceConfig(
       androidNotificationChannelId: 'com.otyaplayer.app.audio',
       androidNotificationChannelName: 'Otya — Now Playing',
-      // Keeping the foreground service alive while paused already makes the
-      // media notification ongoing. audio_service rejects explicitly enabling
-      // both behaviours at once.
+      // Keep the media foreground service alive while paused so Android does
+      // not need to recreate it when playback resumes. The notification remains
+      // dismissible; deleting it intentionally invokes the handler's stop path.
       androidNotificationOngoing: false,
       androidStopForegroundOnPause: false,
       androidNotificationIcon: 'drawable/ic_notification',
       notificationColor: AppColors.brandBlue,
       androidShowNotificationBadge: false,
-      preloadArtwork: true,
+      // Artwork is resolved asynchronously by MediaNotificationService. Do not
+      // let a file/content URI decode delay or prevent the core MediaSession
+      // notification and lock-screen controls from becoming available.
+      preloadArtwork: false,
     ),
   );
   AudioHandlerSingleton.instance.handler = audioHandler;

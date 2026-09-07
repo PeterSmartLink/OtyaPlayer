@@ -7,7 +7,7 @@ void main() {
     final source = File('lib/main.dart').readAsStringSync();
 
     final playback = source.indexOf(
-      "await _safeBackground('playback platform', _initPlaybackPlatform);",
+      "await _safeBackground('playback platform', _ensurePlaybackPlatform);",
     );
     final notifications = source.indexOf('final notificationsReady =');
     final storage = source.indexOf('final storageReady =');
@@ -26,6 +26,7 @@ void main() {
     expect(firebase, greaterThan(playback));
     expect(wait, greaterThan(firebase));
 
+    expect(source, contains('configureEnsureReady(_ensurePlaybackPlatform)'));
     expect(source, contains('cacheReady.then('));
     expect(source, contains('connectivityReady.then('));
     expect(source, contains('firebaseReady.then('));

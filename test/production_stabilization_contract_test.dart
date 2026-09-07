@@ -48,10 +48,22 @@ void main() {
   test('update checks do not pretend disabled or failed checks mean current', () {
     final updates = File('lib/core/services/update_service.dart').readAsStringSync();
 
-    expectNotContains(updates, 'if (!Environment.selfUpdateEnabled) return null;');
+    expect(updates, contains('if (!Environment.selfUpdateEnabled) {'));
+    expect(updates, contains('Updates for this build are managed by Google Play.'));
     expect(updates, contains('UpdateCheckState.unavailable'));
     expect(updates, contains('UpdateCheckState.current'));
     expect(updates, contains('UpdateCheckState.updateAvailable'));
+  });
+
+  test('direct self-update accepts only the immutable tagged APK authority', () {
+    final updates = File('lib/core/services/update_service.dart').readAsStringSync();
+
+    expect(updates, contains("'exactArm64' : 'exactArm32'"));
+    expect(updates, contains('_officialExactApk('));
+    expect(updates, contains("uri.path != '/apk/\$abi'"));
+    expect(updates, contains('tagValues.single != tag'));
+    expectNotContains(updates, 'aliasKey');
+    expectNotContains(updates, 'downloads[exactKey] ??');
   });
 
   test('media refreshes share one in-flight scan without orphaned errors', () {

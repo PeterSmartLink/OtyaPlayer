@@ -800,7 +800,7 @@ class MainActivity : AudioServiceFragmentActivity() {
 
     private fun getVideoThumbnail(videoPath: String, videoId: String): String? {
         val cacheKey = (videoId.ifBlank { videoPath }).hashCode().toUInt().toString(16)
-        val thumbDir = File(cacheDir, "video_thumbs").apply { mkdirs() }
+        val thumbDir = File(cacheDir, "video_thumbs_v2").apply { mkdirs() }
         val thumbFile = File(thumbDir, "$cacheKey.jpg")
         if (thumbFile.exists() && thumbFile.length() > 0L) return thumbFile.absolutePath
 
@@ -814,7 +814,7 @@ class MainActivity : AudioServiceFragmentActivity() {
                             MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
                             numericId,
                         ),
-                        Size(320, 180),
+                        Size(720, 405),
                         null,
                     )
                 } else {
@@ -835,8 +835,19 @@ class MainActivity : AudioServiceFragmentActivity() {
             val retriever = MediaMetadataRetriever()
             try {
                 retriever.setDataSource(videoPath)
+                val durationMs = retriever.extractMetadata(
+                    MediaMetadataRetriever.METADATA_KEY_DURATION,
+                )?.toLongOrNull() ?: 0L
+                // Avoid choosing a black/logo frame at the very beginning when
+                // possible. Ten percent is representative for short/long local
+                // clips, bounded so thumbnail generation stays predictable.
+                val frameUs = if (durationMs > 0L) {
+                    (durationMs * 100L).coerceIn(1_000_000L, 30_000_000L)
+                } else {
+                    1_000_000L
+                }
                 bitmap = retriever.getFrameAtTime(
-                    1_000_000L,
+                    frameUs,
                     MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
                 ) ?: retriever.frameAtTime
             } catch (_: Exception) {
@@ -852,7 +863,7 @@ class MainActivity : AudioServiceFragmentActivity() {
         return try {
             bitmap?.let {
                 FileOutputStream(thumbFile).use { output ->
-                    it.compress(Bitmap.CompressFormat.JPEG, 82, output)
+                    it.compress(Bitmap.CompressFormat.JPEG, 90, output)
                 }
                 if (thumbFile.length() > 0L) thumbFile.absolutePath else null
             }

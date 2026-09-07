@@ -31,11 +31,24 @@ class TogetherMessage {
     required this.createdAt,
     this.senderParticipantId,
     this.mediaPosition,
-  })  : assert(text.length <= maxTextLength),
-        assert(
-          kind != TogetherMessageKind.moment || mediaPosition != null,
-          'Moment messages require a media position.',
-        );
+  }) {
+    // These are production protocol invariants, not debug assertions. Nearby
+    // peers and future remote transports are untrusted input boundaries.
+    if (text.length > maxTextLength) {
+      throw ArgumentError.value(
+        text.length,
+        'text',
+        'Together messages are limited to $maxTextLength characters.',
+      );
+    }
+    if (kind == TogetherMessageKind.moment && mediaPosition == null) {
+      throw ArgumentError.value(
+        mediaPosition,
+        'mediaPosition',
+        'Moment messages require a media position.',
+      );
+    }
+  }
 
   bool get isMoment => kind == TogetherMessageKind.moment;
   bool get isReaction => kind == TogetherMessageKind.reaction;

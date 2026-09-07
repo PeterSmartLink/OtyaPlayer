@@ -1,16 +1,18 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../../../app/theme/app_colors.dart';
 import '../application/nearby_together_runtime.dart';
 import '../domain/together_session.dart';
 import 'together_surface.dart';
 
-/// Live Nearby Together room surface.
+/// Live Together conversation shown over the playing video.
 ///
-/// [TogetherRoomContent] remains the single conversation presentation. This
-/// wrapper only binds it to the process-local Nearby runtime so participants,
-/// messages and reconnect state repaint while the modal remains open.
+/// This is deliberately not a second opaque "chat screen". Portrait uses a
+/// compact bottom glass panel; landscape uses a floating right-side panel. The
+/// keyboard is allowed to grow the surface only while the user is typing.
 Future<void> showNearbyTogetherLiveRoomSurface({
   required BuildContext context,
   required NearbyTogetherRuntime runtime,
@@ -48,7 +50,8 @@ Future<void> showNearbyTogetherLiveRoomSurface({
                     session: session,
                     messages: runtime.state.messages,
                     localParticipantId: localId,
-                    onSendMessage: (text) => unawaited(runtime.sendChat(text)),
+                    onSendMessage: (text) =>
+                        unawaited(runtime.sendChat(text)),
                     onMomentTap: onMomentTap,
                     onInvite: onInvite,
                     onLeave: onLeave,
@@ -59,7 +62,8 @@ Future<void> showNearbyTogetherLiveRoomSurface({
                 ),
               ),
               _TogetherQuickActions(
-                momentEnabled: session.phase == TogetherSessionPhase.watching,
+                momentEnabled:
+                    session.phase == TogetherSessionPhase.watching,
                 onMoment: () => unawaited(runtime.sendCurrentMoment()),
                 onReaction: (reaction) =>
                     unawaited(runtime.sendReaction(reaction)),
@@ -75,59 +79,177 @@ Future<void> showNearbyTogetherLiveRoomSurface({
       context: context,
       useSafeArea: true,
       isScrollControlled: true,
-      backgroundColor:
-          Theme.of(context).colorScheme.surface.withValues(alpha: .98),
-      barrierColor: Colors.black.withValues(alpha: .30),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (sheetContext) => FractionallySizedBox(
-        heightFactor: .64,
-        child: liveContent(sheetContext),
-      ),
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: .08),
+      elevation: 0,
+      builder: (sheetContext) {
+        final media = MediaQuery.of(sheetContext);
+        final availableHeight =
+            media.size.height - media.viewInsets.bottom - media.padding.top;
+        final keyboardOpen = media.viewInsets.bottom > 0;
+        final baseFactor = media.size.height < 680 ? .56 : .48;
+        final factor = keyboardOpen ? .72 : baseFactor;
+        final maxPanel = availableHeight * .82;
+        final panelHeight = _boundedExtent(
+          desired: availableHeight * factor,
+          maximum: maxPanel,
+          preferredMinimum: 300,
+        );
+
+        return AnimatedPadding(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          padding: EdgeInsets.fromLTRB(
+            10,
+            0,
+            10,
+            media.viewInsets.bottom > 0 ? 6 : 10,
+          ),
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: SizedBox(
+              height: panelHeight,
+              width: double.infinity,
+              child: _TogetherGlassPanel(
+                borderRadius: BorderRadius.circular(26),
+                child: liveContent(sheetContext),
+              ),
+            ),
+          ),
+        );
+      },
     );
   } else {
     await showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
       barrierLabel: 'Close Together',
-      barrierColor: Colors.black.withValues(alpha: .18),
+      barrierColor: Colors.black.withValues(alpha: .05),
       transitionDuration: const Duration(milliseconds: 180),
-      pageBuilder: (dialogContext, _, __) => SafeArea(
-        child: Align(
-          alignment: Alignment.centerRight,
-          child: Material(
-            color: Theme.of(dialogContext)
-                .colorScheme
-                .surface
-                .withValues(alpha: .96),
-            elevation: 18,
-            borderRadius:
-                const BorderRadius.horizontal(left: Radius.circular(28)),
-            clipBehavior: Clip.antiAlias,
-            child: SizedBox(
-              width: MediaQuery.sizeOf(dialogContext)
-                  .width
-                  .clamp(320, 430)
-                  .toDouble(),
-              height: double.infinity,
-              child: liveContent(dialogContext),
+      pageBuilder: (dialogContext, _, __) {
+        final media = MediaQuery.of(dialogContext);
+        final keyboardOpen = media.viewInsets.bottom > 0;
+        final availableHeight =
+            media.size.height - media.padding.vertical - media.viewInsets.bottom;
+        final width = (media.size.width * .36).clamp(300.0, 390.0).toDouble();
+        final heightFactor = keyboardOpen ? .90 : .78;
+        final height = _boundedExtent(
+          desired: availableHeight * heightFactor,
+          maximum: availableHeight,
+          preferredMinimum: 250,
+        );
+
+        return SafeArea(
+          child: AnimatedPadding(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            padding: EdgeInsets.fromLTRB(
+              10,
+              10,
+              12,
+              media.viewInsets.bottom > 0 ? 6 : 12,
+            ),
+            child: Align(
+              alignment: Alignment.bottomRight,
+              child: SizedBox(
+                width: width,
+                height: height,
+                child: _TogetherGlassPanel(
+                  borderRadius: BorderRadius.circular(24),
+                  child: liveContent(dialogContext),
+                ),
+              ),
             ),
           ),
+        );
+      },
+      transitionBuilder: (_, animation, __, child) => FadeTransition(
+        opacity: animation,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(.04, .04),
+            end: Offset.zero,
+          ).animate(
+            CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+          ),
+          child: child,
         ),
-      ),
-      transitionBuilder: (_, animation, __, child) => SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(1, 0),
-          end: Offset.zero,
-        ).animate(
-          CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-        ),
-        child: child,
       ),
     );
   }
   runtime.markConversationRead();
+}
+
+double _boundedExtent({
+  required double desired,
+  required double maximum,
+  required double preferredMinimum,
+}) {
+  final safeMaximum = maximum > 1 ? maximum : 1.0;
+  final safeMinimum =
+      preferredMinimum < safeMaximum ? preferredMinimum : safeMaximum;
+  return desired.clamp(safeMinimum, safeMaximum).toDouble();
+}
+
+class _TogetherGlassPanel extends StatelessWidget {
+  final BorderRadius borderRadius;
+  final Widget child;
+
+  const _TogetherGlassPanel({
+    required this.borderRadius,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final baseTheme = Theme.of(context);
+    final glassScheme = baseTheme.colorScheme.copyWith(
+      surfaceContainerHighest:
+          AppColors.surfaceElevated.withValues(alpha: .48),
+      surfaceContainerHigh: AppColors.surfaceElevated.withValues(alpha: .42),
+      surfaceContainer: AppColors.surface.withValues(alpha: .38),
+    );
+
+    return ClipRRect(
+      borderRadius: borderRadius,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                AppColors.surfaceElevated.withValues(alpha: .72),
+                AppColors.surface.withValues(alpha: .58),
+                AppColors.brandDeepBlue.withValues(alpha: .16),
+              ],
+            ),
+            borderRadius: borderRadius,
+            border: Border.all(
+              color: AppColors.brandCyan.withValues(alpha: .18),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: .20),
+                blurRadius: 24,
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
+          child: Theme(
+            data: baseTheme.copyWith(
+              colorScheme: glassScheme,
+              inputDecorationTheme: baseTheme.inputDecorationTheme.copyWith(
+                fillColor: AppColors.surfaceElevated.withValues(alpha: .42),
+              ),
+            ),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _TogetherQuickActions extends StatelessWidget {
@@ -146,15 +268,16 @@ class _TogetherQuickActions extends StatelessWidget {
     final theme = Theme.of(context);
     return DecoratedBox(
       decoration: BoxDecoration(
+        color: AppColors.surface.withValues(alpha: .18),
         border: Border(
           top: BorderSide(
-            color: theme.colorScheme.outlineVariant.withValues(alpha: .45),
+            color: theme.colorScheme.outlineVariant.withValues(alpha: .34),
           ),
         ),
       ),
       child: SafeArea(
         top: false,
-        minimum: const EdgeInsets.fromLTRB(8, 4, 8, 5),
+        minimum: const EdgeInsets.fromLTRB(8, 3, 8, 4),
         child: Row(
           children: [
             Tooltip(
@@ -164,7 +287,7 @@ class _TogetherQuickActions extends StatelessWidget {
                 icon: const Icon(Icons.bookmark_add_outlined, size: 18),
                 label: const Text('Moment'),
                 style: TextButton.styleFrom(
-                  minimumSize: const Size(44, 44),
+                  minimumSize: const Size(44, 42),
                   visualDensity: VisualDensity.compact,
                 ),
               ),
@@ -202,12 +325,12 @@ class _ReactionButton extends StatelessWidget {
           onTap: onPressed,
           radius: 24,
           child: SizedBox(
-            width: 42,
-            height: 44,
+            width: 40,
+            height: 42,
             child: Center(
               child: Text(
                 reaction,
-                style: const TextStyle(fontSize: 20),
+                style: const TextStyle(fontSize: 19),
               ),
             ),
           ),

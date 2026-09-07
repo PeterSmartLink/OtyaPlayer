@@ -22,6 +22,7 @@ import '../../together/application/nearby_together_session.dart';
 import '../../together/presentation/nearby_together_host_sheet.dart';
 import '../../together/presentation/nearby_together_join_sheet.dart';
 import '../../together/presentation/nearby_together_live_surface.dart';
+import '../../together/presentation/together_ambient_overlay.dart';
 import '../../transfer/data/transfer_security_policy.dart';
 import 'queue_screen.dart';
 import 'widgets/video_gesture_layer.dart';
@@ -137,6 +138,16 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
         setState(() => _controlsVisible = false);
       }
     });
+  }
+
+  void _toggleControlsVisibility() {
+    _hideTimer?.cancel();
+    if (!mounted || _isLocked) return;
+    if (_controlsVisible) {
+      setState(() => _controlsVisible = false);
+      return;
+    }
+    _resetHideTimer();
   }
 
   Future<void> _initOrientationFromVideo() async {
@@ -909,6 +920,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
       body: Stack(
         children: [
           VideoGestureLayer(
+            onTap: _toggleControlsVisibility,
             onSeek: (delta) {
               if (_player == null) return;
               final next = _position + delta;
@@ -927,24 +939,13 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
               onPlayerReady: _attachPlayer,
             ),
           ),
-          if (!_controlsVisible && !_isLocked)
-            Positioned.fill(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: _resetHideTimer,
-                child: const SizedBox.expand(),
-              ),
-            ),
           if (!_isLocked)
             AnimatedOpacity(
               opacity: _controlsVisible ? 1.0 : 0.0,
               duration: const Duration(milliseconds: 260),
               child: IgnorePointer(
                 ignoring: !_controlsVisible,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onTap: _resetHideTimer,
-                  child: VideoPlayerControlsOverlay(
+                child: VideoPlayerControlsOverlay(
                     title: _visibleTitle,
                     ccEnabled: _ccEnabled,
                     isMuted: _isMuted,
@@ -975,8 +976,12 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
                     onAspectRatio: _cycleAspectRatio,
                     onPip: _enterPip,
                   ),
-                ),
               ),
+            ),
+          if (!_isLocked)
+            TogetherAmbientOverlay(
+              controlsVisible: _controlsVisible,
+              onOpenConversation: () => unawaited(_showActiveTogetherRoom()),
             ),
           if (_isLocked)
             VideoPlayerLockOverlay(

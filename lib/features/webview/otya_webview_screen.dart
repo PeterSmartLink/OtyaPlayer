@@ -31,6 +31,9 @@ class _OtyaWebViewScreenState extends State<OtyaWebViewScreen> {
   static const _trustedHosts = <String>{
     'petersmartlink.com',
     'www.petersmartlink.com',
+    'space.petersmartlink.com',
+    'docs.petersmartlink.com',
+    'status.petersmartlink.com',
   };
 
   late final WebViewController _controller;
@@ -96,7 +99,9 @@ class _OtyaWebViewScreenState extends State<OtyaWebViewScreen> {
     final binary = path.endsWith('.apk') ||
         path.endsWith('.zip') ||
         path.endsWith('.exe') ||
-        path.endsWith('.dmg');
+        path.endsWith('.dmg') ||
+        path == '/apk' ||
+        path.startsWith('/apk/');
 
     if (_isTrustedOtyaUri(uri) && !binary) {
       return NavigationDecision.navigate;

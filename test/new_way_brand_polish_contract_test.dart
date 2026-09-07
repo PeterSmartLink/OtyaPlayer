@@ -40,7 +40,8 @@ void main() {
     expect(colors, contains('Color(0xFF27E8FF)'));
     expect(colors, contains('Color(0xFF126BFF)'));
     expect(colors, contains('Color(0xFF173BFF)'));
-    expect(logo, contains('assets/branding/otya_mark_current.png'));
+    expect(logo, contains('assets/branding/otya_app_icon.webp'));
+    expect(logo, isNot(contains('assets/branding/otya_mark_current.png')));
     expect(logo, contains("'Otya'"));
     expect(brandNote, contains('current owner-approved cyan/blue Otya app icon'));
     expect(brandNote, contains('Do not restore the retired'));

@@ -5,8 +5,13 @@ set -euo pipefail
 
 RAW_TAG="${RELEASE_TAG:-${CI_COMMIT_TAG:-${GITHUB_REF_NAME:-}}}"
 [ -n "$RAW_TAG" ] || { echo "ERROR: No release tag found"; exit 1; }
-[[ "$RAW_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "ERROR: Invalid release tag '$RAW_TAG'"; exit 1; }
-VERSION="${RAW_TAG#v}"
+[[ "$RAW_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\+[1-9][0-9]*$ ]] || {
+  echo "ERROR: Invalid release tag '$RAW_TAG' (expected v<version>+<build>, for example v1.0.0+2)"
+  exit 1
+}
+TAG_VERSION="${RAW_TAG#v}"
+VERSION="${TAG_VERSION%%+*}"
+TAG_BUILD="${TAG_VERSION##*+}"
 
 PUBSPEC_VERSION=$(awk '/^version:/ {print $2; exit}' pubspec.yaml)
 [ -n "$PUBSPEC_VERSION" ] || { echo "ERROR: pubspec.yaml has no version"; exit 1; }
@@ -18,6 +23,10 @@ PUBSPEC_CODE="${PUBSPEC_VERSION##*+}"
 }
 [[ "$PUBSPEC_CODE" =~ ^[1-9][0-9]*$ ]] || {
   echo "ERROR: pubspec Android build number must be a positive integer"
+  exit 1
+}
+[ "$TAG_BUILD" = "$PUBSPEC_CODE" ] || {
+  echo "ERROR: release tag build $TAG_BUILD does not match pubspec build $PUBSPEC_CODE"
   exit 1
 }
 VERSION_CODE="$PUBSPEC_CODE"
@@ -42,10 +51,19 @@ WORKER_URL="${WORKER_URL%/}"
 
 ARM64_APK="${ARM64_APK:-build/app/outputs/flutter-apk/app-arm64-v8a-release.apk}"
 ARM32_APK="${ARM32_APK:-build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk}"
+MAX_APK_BYTES=40000000
+WARN_APK_BYTES=35000000
 for APK in "$ARM64_APK" "$ARM32_APK"; do
   test -f "$APK" || { echo "ERROR: APK not found: $APK"; exit 1; }
   SIZE=$(stat -c%s "$APK" 2>/dev/null || stat -f%z "$APK")
   [ "$SIZE" -ge 5000000 ] || { echo "ERROR: $APK looks too small ($SIZE bytes)"; exit 1; }
+  [ "$SIZE" -le "$MAX_APK_BYTES" ] || {
+    echo "ERROR: $APK is $SIZE bytes; Otya split APKs must stay at or below $MAX_APK_BYTES bytes"
+    exit 1
+  }
+  if [ "$SIZE" -gt "$WARN_APK_BYTES" ]; then
+    echo "WARNING: $APK is $SIZE bytes and has crossed Otya's $WARN_APK_BYTES-byte size warning line"
+  fi
 done
 
 CHANGELOG_FILE=$(mktemp)

@@ -8,6 +8,11 @@ abstract final class TogetherPolicy {
   /// V1 is deliberately private and one-to-one for reliability.
   static const int maxParticipantsV1 = 2;
 
+  /// Keep the ephemeral transcript bounded even during very long rooms or a
+  /// noisy peer. The newest messages are retained; closing the room still
+  /// removes the entire conversation.
+  static const int maxConversationMessagesV1 = 250;
+
   /// Conversation remains available briefly after playback ends so people can
   /// react, replay, or choose the next item without creating a new room.
   static const Duration afterWatchIdleTimeout = Duration(minutes: 10);

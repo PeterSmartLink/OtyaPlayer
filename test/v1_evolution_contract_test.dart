@@ -36,17 +36,20 @@ void main() {
     expect(workflow, isNot(contains(r'keytool -printcert -jarfile "$APK"')));
   });
 
-  test('all release publishing is locked to the first official v1.0.0 tag', () {
+  test('production releases keep 1.0.0 but use immutable build-specific tags', () {
     final directRelease =
         File('.github/workflows/release-apk.yml').readAsStringSync();
     final release = File('.github/workflows/release.yml').readAsStringSync();
 
     expect(directRelease, contains('Verify v1.0.0 release identity'));
     expect(directRelease, contains(r'^1\.0\.0\+[1-9][0-9]*$'));
-    expect(release, contains("- 'v1.0.0'"));
-    expect(release, contains("test \"\$TAG\" = 'v1.0.0'"));
+    expect(release, contains("- 'v1.0.0+*'"));
+    expect(release, contains(r'^v1\.0\.0\+[1-9][0-9]*$'));
     expect(release, contains(r'^1\.0\.0\+[1-9][0-9]*$'));
-    expect(release, isNot(contains("'v[0-9]*.[0-9]*.[0-9]*'")));
+    expect(release, contains('APP_VERSION='));
+    expect(release, contains(r'test "$APP_VERSION" = "${RELEASE_TAG#v}"'));
+    expect(release, contains('does not exactly match pubspec version'));
+    expect(release, isNot(contains("test \"\$TAG\" = 'v1.0.0'")));
     expect(release, contains('actions/checkout@v6'));
   });
 

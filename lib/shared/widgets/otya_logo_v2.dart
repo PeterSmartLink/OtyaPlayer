@@ -4,10 +4,10 @@ import '../../app/theme/app_colors.dart';
 
 /// Canonical Otya lockup.
 ///
-/// The current product mark is shipped as a transparent local asset derived
-/// from the approved app icon. Keeping the mark as an asset makes the launcher,
-/// headers and marketing identity visually consistent instead of maintaining a
-/// second hand-drawn legacy symbol in Flutter.
+/// The current product mark is sourced from the single owner-approved cyan/blue
+/// app icon. The WebP is the canonical binary because it is decoded and
+/// validated by the app/release pipeline; older PNG/SVG logo copies are legacy
+/// compatibility assets and must not be used for product UI.
 class OtyaLogo extends StatelessWidget {
   const OtyaLogo({
     super.key,
@@ -66,11 +66,14 @@ class OtyaMark extends StatelessWidget {
       image: true,
       child: SizedBox.square(
         dimension: size,
-        child: Image.asset(
-          'assets/branding/otya_mark_current.png',
-          fit: BoxFit.contain,
-          filterQuality: FilterQuality.high,
-          errorBuilder: (_, __, ___) => const _BrandFallback(),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(size * .22),
+          child: Image.asset(
+            'assets/branding/otya_app_icon.webp',
+            fit: BoxFit.cover,
+            filterQuality: FilterQuality.high,
+            errorBuilder: (_, __, ___) => const _BrandFallback(),
+          ),
         ),
       ),
     );

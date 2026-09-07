@@ -191,11 +191,20 @@ class _AboutScreenState extends State<AboutScreen> {
       messenger.hideCurrentSnackBar();
       if (!context.mounted) return;
       if (info == null) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Otya is up to date.')),
-        );
+        final service = UpdateService.instance;
+        final message = switch (service.lastState) {
+          UpdateCheckState.current => 'Otya is up to date.',
+          UpdateCheckState.preRelease =>
+            'No public Otya release is published yet.',
+          UpdateCheckState.skipped =>
+            service.lastError ?? 'The update check was skipped.',
+          UpdateCheckState.unavailable =>
+            service.lastError ?? 'The Otya release service is unavailable.',
+          _ => service.lastError ?? 'No update information is available.',
+        };
+        messenger.showSnackBar(SnackBar(content: Text(message)));
       } else {
-        await UpdateDialog.checkAndShow(context);
+        await UpdateDialog.checkAndShow(context, forceCheck: true);
       }
     } catch (_) {
       messenger.hideCurrentSnackBar();

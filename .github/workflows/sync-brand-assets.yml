@@ -1,4 +1,4 @@
-name: Sync OTYA brand assets to Cloudflare R2
+name: Sync Otya brand assets to Cloudflare R2
 
 on:
   push:
@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   sync:
-    name: Sync approved OTYA branding
+    name: Sync approved Otya branding
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: production
@@ -41,23 +41,36 @@ jobs:
           done
           [[ "$R2_ENDPOINT" == https://* ]] || { echo "ERROR: R2_ENDPOINT must use HTTPS"; exit 1; }
 
-      - name: Validate approved OTYA image
+      - name: Decode and validate approved Otya image
         shell: bash
         run: |
           set -euo pipefail
+          python3 -m pip install pillow --quiet
           python3 - <<'PY'
           from pathlib import Path
+          from PIL import Image
+
           p = Path('assets/branding/otya_app_icon.webp')
-          data = p.read_bytes()
-          if len(data) < 12 or data[:4] != b'RIFF' or data[8:12] != b'WEBP':
-              raise SystemExit('ERROR: OTYA branding asset is not a valid WebP container')
-          print(f'Validated WebP container: {len(data)} bytes')
+          if not p.is_file():
+              raise SystemExit('ERROR: canonical Otya app icon is missing')
+          try:
+              with Image.open(p) as image:
+                  if image.format != 'WEBP':
+                      raise SystemExit(f'ERROR: expected WebP, got {image.format!r}')
+                  image.load()
+                  if image.width <= 0 or image.height <= 0:
+                      raise SystemExit('ERROR: Otya icon has invalid dimensions')
+                  print(f'Validated decoded WebP: {image.width}x{image.height}, {p.stat().st_size} bytes')
+          except SystemExit:
+              raise
+          except Exception as exc:
+              raise SystemExit(f'ERROR: Otya branding image cannot be decoded: {exc}')
           PY
 
       - name: Install AWS CLI
         run: pip install awscli --quiet
 
-      - name: Upload and verify OTYA app icon
+      - name: Upload and verify Otya app icon
         shell: bash
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -69,7 +82,7 @@ jobs:
           set -euo pipefail
           SRC='assets/branding/otya_app_icon.webp'
           STABLE_KEY='assets/branding/otya-app-icon.webp'
-          test -s "$SRC" || { echo "ERROR: Missing approved OTYA icon"; exit 1; }
+          test -s "$SRC" || { echo "ERROR: Missing approved Otya icon"; exit 1; }
 
           SHA256="$(sha256sum "$SRC" | awk '{print $1}')"
           VERSIONED_KEY="assets/branding/otya-app-icon-${SHA256:0:12}.webp"

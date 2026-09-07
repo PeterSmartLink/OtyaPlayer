@@ -259,123 +259,6 @@ class _ResumeCard extends StatelessWidget {
   }
 }
 
-class _VideoCard extends StatelessWidget {
-  const _VideoCard({required this.item, required this.onTap});
-
-  final MediaItem item;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final progress = _resumeProgress(item);
-    return Semantics(
-      button: true,
-      label: 'Play ${item.title}',
-      child: Material(
-        color: AppColors.cardOf(context),
-        borderRadius: BorderRadius.circular(18),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    _VideoThumb(item: item, radius: 0),
-                    const DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Colors.transparent, Color(0x8F000000)],
-                          begin: Alignment.center,
-                          end: Alignment.bottomCenter,
-                        ),
-                      ),
-                    ),
-                    const Center(child: _PlayBadge(size: 42)),
-                    Positioned(
-                      right: 8,
-                      bottom: 8,
-                      child: _DurationBadge(label: item.formattedDuration),
-                    ),
-                    if (progress > 0.02 && progress < 0.98)
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        child: LinearProgressIndicator(
-                          value: progress,
-                          minHeight: 3,
-                          backgroundColor: Colors.white24,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(11, 9, 11, 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            item.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                        MediaNewIndicator(item: item),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.folder_outlined,
-                          size: 13,
-                          color: AppColors.textMuted,
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            _folderName(item.filePath),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 10.5,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          item.formattedSize,
-                          style: const TextStyle(
-                            color: AppColors.textMuted,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _FolderCard extends StatelessWidget {
   const _FolderCard({
     required this.name,
@@ -651,8 +534,13 @@ class _VideoThumbState extends State<_VideoThumb> {
               ? Image.file(
                   File(_path!),
                   fit: BoxFit.cover,
-                  cacheWidth: 480,
-                  filterQuality: FilterQuality.low,
+                  // Native v2 thumbnails are 720px wide. Decode near the
+                  // source size and use balanced filtering so HD local media
+                  // remains crisp without forcing full-resolution frames into
+                  // scrolling-list memory.
+                  cacheWidth: 720,
+                  filterQuality: FilterQuality.medium,
+                  gaplessPlayback: true,
                   errorBuilder: (_, __, ___) => _placeholder(context),
                 )
               : _placeholder(context),
@@ -729,13 +617,6 @@ class _VideoError extends StatelessWidget {
           ),
         ),
       );
-}
-
-int _gridColumns(double width) {
-  if (width >= 1100) return 5;
-  if (width >= 800) return 4;
-  if (width >= 540) return 3;
-  return 2;
 }
 
 String _folderName(String path) {

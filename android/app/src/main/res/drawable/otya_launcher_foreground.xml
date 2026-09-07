@@ -1,10 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- One reviewed high-resolution transparent mark is scaled by the
-         adaptive-icon layer. Android still owns the final launcher mask. -->
+    <!-- Generated at build time from assets/branding/otya_app_icon.webp. -->
     <item>
         <bitmap
-            android:src="@drawable/otya_launcher_foreground_bitmap"
+            android:src="@drawable/otya_launcher_source"
             android:gravity="fill" />
     </item>
 </layer-list>

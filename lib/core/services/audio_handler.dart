@@ -42,17 +42,26 @@ class OtyaAudioHandler extends BaseAudioHandler with SeekHandler {
     }
   }
 
+  bool _isCurrentPlayer(Player player) => identical(_player, player);
+
   void _subscribeToPlayer(Player player) {
-    _playingSub = player.stream.playing.listen(
-      (playing) => _updatePlaybackState(playing: playing),
-    );
-    _bufferingSub = player.stream.buffering.listen(
-      (buffering) => _updatePlaybackState(buffering: buffering),
-    );
-    _positionSub = player.stream.position.listen(
-      (position) => _updatePlaybackState(position: position),
-    );
+    // StreamSubscription.cancel() completes asynchronously. Guard every
+    // callback as well so a queued event from the previous player can never
+    // overwrite MediaSession state after a rapid track/player handoff.
+    _playingSub = player.stream.playing.listen((playing) {
+      if (!_isCurrentPlayer(player)) return;
+      _updatePlaybackState(playing: playing);
+    });
+    _bufferingSub = player.stream.buffering.listen((buffering) {
+      if (!_isCurrentPlayer(player)) return;
+      _updatePlaybackState(buffering: buffering);
+    });
+    _positionSub = player.stream.position.listen((position) {
+      if (!_isCurrentPlayer(player)) return;
+      _updatePlaybackState(position: position);
+    });
     _durationSub = player.stream.duration.listen((duration) {
+      if (!_isCurrentPlayer(player)) return;
       final current = mediaItem.value;
       if (current != null && duration != Duration.zero) {
         mediaItem.add(current.copyWith(duration: duration));
@@ -93,9 +102,6 @@ class OtyaAudioHandler extends BaseAudioHandler with SeekHandler {
             : AudioProcessingState.ready;
 
     playbackState.add(playbackState.value.copyWith(
-      // Keep the three universal transport actions first. Pre-Android 13
-      // MediaStyle notifications use this order directly; Android 13+ maps the
-      // same PlaybackState actions into its system-owned modern media slots.
       controls: _controls(isPlaying),
       systemActions: const {
         MediaAction.seek,
@@ -202,8 +208,47 @@ class AudioHandlerSingleton {
   Player? _pendingPlayer;
   MediaItem? _pendingMediaItem;
   bool? _pendingPlaying;
+  Future<void> Function()? _ensureReadyCallback;
+  Future<void>? _ensureReadyFuture;
 
   OtyaAudioHandler? get handler => _handler;
+  bool get isReady => _handler != null;
+
+  /// Registers the process-level AudioService initializer. Media notification
+  /// calls can use this to recover if Android service initialization failed
+  /// during startup. Concurrent recovery attempts share one in-flight future.
+  void configureEnsureReady(Future<void> Function() callback) {
+    _ensureReadyCallback = callback;
+  }
+
+  Future<bool> ensureReady() async {
+    if (_handler != null) return true;
+    final callback = _ensureReadyCallback;
+    if (callback == null) return false;
+
+    final inFlight = _ensureReadyFuture;
+    if (inFlight != null) {
+      try {
+        await inFlight;
+      } catch (_) {
+        // The owning initializer reports failures. A later call may retry.
+      }
+      return _handler != null;
+    }
+
+    final attempt = Future<void>.sync(callback);
+    _ensureReadyFuture = attempt;
+    try {
+      await attempt;
+    } catch (error) {
+      debugPrint('[AudioHandlerSingleton] Media-session recovery failed: $error');
+    } finally {
+      if (identical(_ensureReadyFuture, attempt)) {
+        _ensureReadyFuture = null;
+      }
+    }
+    return _handler != null;
+  }
 
   List<MediaControl> _controls(bool isPlaying) => [
         MediaControl.skipToPrevious,

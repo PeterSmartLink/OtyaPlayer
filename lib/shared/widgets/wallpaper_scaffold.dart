@@ -139,12 +139,17 @@ class _ImageThemeBackground extends StatelessWidget {
       );
     }
 
+    // Preserve readability without crushing the wallpaper into black. Existing
+    // theme opacity remains meaningful, but Otya applies it as a restrained
+    // readability layer rather than a second full-strength black veil.
+    final effectiveDim = (dimAmount * .65).clamp(.08, .48);
+
     return Stack(
       fit: StackFit.expand,
       children: [
-        ColoredBox(color: const Color(0xFF08080B), child: image),
+        ColoredBox(color: AppColors.background, child: image),
         ColoredBox(
-          color: Colors.black.withValues(alpha: dimAmount.clamp(0.18, 0.70)),
+          color: AppColors.background.withValues(alpha: effectiveDim),
         ),
         const DecoratedBox(
           decoration: BoxDecoration(
@@ -152,9 +157,9 @@ class _ImageThemeBackground extends StatelessWidget {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                Color(0x5208080B),
-                Color(0x1208080B),
-                Color(0x9A08080B),
+                Color(0x3607152D),
+                Color(0x0807152D),
+                Color(0x7207152D),
               ],
               stops: [0.0, 0.48, 1.0],
             ),
@@ -171,8 +176,8 @@ class _ImageThemeBackground extends StatelessWidget {
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    AppColors.accent.withValues(alpha: 0.20),
-                    AppColors.accent.withValues(alpha: 0.045),
+                    AppColors.brandCyan.withValues(alpha: .25),
+                    AppColors.brandBlue.withValues(alpha: .10),
                     Colors.transparent,
                   ],
                 ),

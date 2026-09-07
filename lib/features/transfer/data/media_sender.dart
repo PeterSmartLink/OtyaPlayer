@@ -1,10 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
-/// Pure Dart local HTTP sender for Otya Transfer.
+/// Pure Dart local HTTP sender for Otya Send.
 ///
 /// No cloud relay is used. A cryptographically random one-time token protects
 /// the serving URL, and Range requests allow a matching receiver to resume an
@@ -12,6 +13,9 @@ import 'package:flutter/foundation.dart';
 class MediaSender {
   static const int _preferredPort = 8080;
   static const int _chunkBytes = 256 * 1024;
+  static const int _maxTransferBytes = 16 * 1024 * 1024 * 1024;
+  static const int _maxBatchBytes = 64 * 1024 * 1024 * 1024;
+  static const int _maxBatchItems = 200;
   static const Set<String> _supportedExtensions = {
     'mp4',
     'mkv',
@@ -29,7 +33,7 @@ class MediaSender {
   };
 
   HttpServer? _server;
-  String? _filePath;
+  List<File> _files = const <File>[];
   String? _localIp;
   String? _token;
 
@@ -43,38 +47,80 @@ class MediaSender {
     ).join();
   }
 
+  /// Starts the backwards-compatible single-file sender used by Together and
+  /// older Otya Send links.
   Future<String> startServing(String filePath) async {
     await stop();
     await Future<void>.delayed(const Duration(milliseconds: 100));
 
     final file = await _validatedMediaFile(filePath);
+    final session = await _startServer(<File>[file]);
+    return _buildMediaUrl(
+      file: file,
+      ip: session.ip,
+      port: session.port,
+      token: session.token,
+    );
+  }
+
+  /// Starts one local sender for every selected song/video and returns a single
+  /// QR-safe batch URL. Files are served individually rather than zipped, so
+  /// Otya does not duplicate large media or need temporary archive storage.
+  Future<String> startServingBatch(Iterable<String> filePaths) async {
+    await stop();
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    final seen = <String>{};
+    final files = <File>[];
+    var totalBatchBytes = 0;
+    for (final path in filePaths) {
+      if (!seen.add(path)) continue;
+      final file = await _validatedMediaFile(path);
+      final length = await file.length();
+      totalBatchBytes += length;
+      if (totalBatchBytes > _maxBatchBytes) {
+        throw const FormatException(
+          'This selection is larger than Otya Send can safely prepare at once.',
+        );
+      }
+      files.add(file);
+      if (files.length > _maxBatchItems) {
+        throw const FormatException(
+          'Otya Send can prepare up to 200 media items at a time.',
+        );
+      }
+    }
+    if (files.isEmpty) {
+      throw const FormatException('Choose at least one song or video to send.');
+    }
+
+    final session = await _startServer(files);
+    return 'http://${session.ip}:${session.port}/batch?t=${session.token}';
+  }
+
+  Future<_SenderSession> _startServer(List<File> files) async {
     final ip = await _getLocalIp();
     final token = _generateToken();
     final server = await _bindServer();
 
-    _filePath = filePath;
+    _files = List<File>.unmodifiable(files);
     _localIp = ip;
     _token = token;
     _server = server;
 
-    debugPrint('[MediaSender] Otya Transfer server ready on local network.');
+    debugPrint(
+      '[MediaSender] Otya Send server ready with ${files.length} item(s).',
+    );
     server.listen(
       _handleRequest,
       onError: (Object e) => debugPrint('[MediaSender] Error: $e'),
       cancelOnError: false,
     );
-    return _buildMediaUrl(
-      file: file,
-      ip: ip,
-      port: server.port,
-      token: token,
-    );
+    return _SenderSession(ip: ip, port: server.port, token: token);
   }
 
   /// Replaces the media behind an already-running local sender without
-  /// restarting the HTTP server. The new file is fully validated before any
-  /// active state changes, then the token rotates so stale URLs cannot request
-  /// the next media. Requests already streaming the previous file may finish.
+  /// restarting the HTTP server. Together uses this for host handoff/next media.
   Future<String> switchServing(String filePath) async {
     final server = _server;
     final ip = _localIp;
@@ -84,7 +130,7 @@ class MediaSender {
 
     final file = await _validatedMediaFile(filePath);
     final token = _generateToken();
-    _filePath = filePath;
+    _files = <File>[file];
     _token = token;
 
     return _buildMediaUrl(
@@ -102,7 +148,18 @@ class MediaSender {
     }
     final extension = _extension(filePath);
     if (!_supportedExtensions.contains(extension)) {
-      throw const FormatException('Otya Transfer only shares supported media files.');
+      throw const FormatException(
+        'Otya Send only shares supported music and video files.',
+      );
+    }
+    final length = await file.length();
+    if (length <= 0) {
+      throw FileSystemException('Media file is empty', filePath);
+    }
+    if (length > _maxTransferBytes) {
+      throw const FormatException(
+        'This media file is larger than Otya Send can safely transfer.',
+      );
     }
     return file;
   }
@@ -113,11 +170,7 @@ class MediaSender {
     required int port,
     required String token,
   }) {
-    final name = Uri.encodeQueryComponent(
-      file.uri.pathSegments.isNotEmpty
-          ? file.uri.pathSegments.last
-          : 'otya-transfer',
-    );
+    final name = Uri.encodeQueryComponent(_fileName(file));
     return 'http://$ip:$port/media?t=$token&name=$name';
   }
 
@@ -137,7 +190,7 @@ class MediaSender {
     await _server?.close(force: true);
     _server = null;
     _localIp = null;
-    _filePath = null;
+    _files = const <File>[];
     _token = null;
     debugPrint('[MediaSender] Stopped.');
   }
@@ -153,17 +206,9 @@ class MediaSender {
       return;
     }
 
-    if (req.uri.path != '/media') {
-      _secureHeaders(req.response);
-      req.response
-        ..statusCode = HttpStatus.notFound
-        ..write('Not found');
-      await req.response.close();
-      return;
-    }
-
     final requestToken = req.uri.queryParameters['t'];
-    if (!_tokenMatches(requestToken, _token)) {
+    final currentToken = _token;
+    if (!_tokenMatches(requestToken, currentToken)) {
       _secureHeaders(req.response);
       req.response
         ..statusCode = HttpStatus.forbidden
@@ -173,17 +218,78 @@ class MediaSender {
       return;
     }
 
-    final filePath = _filePath;
-    if (filePath == null) {
+    if (req.uri.path == '/batch') {
+      await _serveBatchManifest(req, currentToken!);
+      return;
+    }
+
+    final file = _fileForRequestPath(req.uri.path);
+    if (file == null) {
       _secureHeaders(req.response);
       req.response
-        ..statusCode = HttpStatus.serviceUnavailable
-        ..write('No file');
+        ..statusCode = HttpStatus.notFound
+        ..write('Not found');
       await req.response.close();
       return;
     }
 
-    final file = File(filePath);
+    await _serveMedia(req, file);
+  }
+
+  File? _fileForRequestPath(String path) {
+    final files = _files;
+    if (files.isEmpty) return null;
+    if (path == '/media') return files.first;
+
+    final match = RegExp(r'^/media/([0-9]+)$').firstMatch(path);
+    if (match == null) return null;
+    final index = int.tryParse(match.group(1)!);
+    if (index == null || index < 0 || index >= files.length) return null;
+    return files[index];
+  }
+
+  Future<void> _serveBatchManifest(HttpRequest req, String token) async {
+    final server = _server;
+    final ip = _localIp;
+    final files = _files;
+    if (server == null || ip == null || files.isEmpty) {
+      _secureHeaders(req.response);
+      req.response
+        ..statusCode = HttpStatus.serviceUnavailable
+        ..write('No media');
+      await req.response.close();
+      return;
+    }
+
+    final items = <Map<String, Object>>[];
+    for (var i = 0; i < files.length; i++) {
+      final file = files[i];
+      items.add(<String, Object>{
+        'name': _fileName(file),
+        'bytes': await file.length(),
+        'url': 'http://$ip:${server.port}/media/$i?t=$token',
+      });
+    }
+
+    final payload = utf8.encode(jsonEncode(<String, Object>{
+      'version': 1,
+      'count': items.length,
+      'files': items,
+    }));
+    final response = req.response;
+    _secureHeaders(response);
+    response
+      ..statusCode = HttpStatus.ok
+      ..headers.contentType = ContentType.json
+      ..headers.set(HttpHeaders.contentLengthHeader, payload.length)
+      ..headers.set('X-Otya-Transfer', '1')
+      ..headers.set('X-Otya-Transfer-Mode', 'batch');
+
+    if (req.method != 'HEAD') response.add(payload);
+    await response.close();
+  }
+
+  Future<void> _serveMedia(HttpRequest req, File file) async {
     if (!await file.exists()) {
       _secureHeaders(req.response);
       req.response
@@ -203,7 +309,7 @@ class MediaSender {
       return;
     }
 
-    final mimeType = _mimeType(filePath);
+    final mimeType = _mimeType(file.path);
     final rangeHeader = req.headers.value(HttpHeaders.rangeHeader);
     var start = 0;
     var end = fileLength - 1;
@@ -244,12 +350,9 @@ class MediaSender {
       ..headers.set(HttpHeaders.cacheControlHeader, 'no-store')
       ..headers.set('X-Otya-Transfer', '1');
 
-    final fileName = file.uri.pathSegments.isNotEmpty
-        ? file.uri.pathSegments.last
-        : 'otya-transfer';
     response.headers.set(
       'Content-Disposition',
-      'attachment; filename="${fileName.replaceAll('"', '')}"',
+      'attachment; filename="${_fileName(file).replaceAll('"', '')}"',
     );
 
     if (isPartial) {
@@ -290,11 +393,16 @@ class MediaSender {
       ..set(HttpHeaders.cacheControlHeader, 'no-store')
       ..set('X-Content-Type-Options', 'nosniff')
       ..set('Referrer-Policy', 'no-referrer')
-      ..set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+      ..set(
+        'Content-Security-Policy',
+        "default-src 'none'; frame-ancestors 'none'",
+      );
   }
 
   bool _tokenMatches(String? provided, String? expected) {
-    if (provided == null || expected == null || provided.length != expected.length) {
+    if (provided == null ||
+        expected == null ||
+        provided.length != expected.length) {
       return false;
     }
     var difference = 0;
@@ -326,9 +434,13 @@ class MediaSender {
       debugPrint('[MediaSender] Local network discovery failed: $e');
     }
     throw StateError(
-      'Connect both devices to the same Wi-Fi or hotspot before using Transfer.',
+      'Connect both devices to the same Wi-Fi or hotspot before using Send.',
     );
   }
+
+  String _fileName(File file) => file.uri.pathSegments.isNotEmpty
+      ? file.uri.pathSegments.last
+      : 'otya-transfer';
 
   String _extension(String path) {
     final name = path.replaceAll('\\', '/').split('/').last;
@@ -354,4 +466,16 @@ class MediaSender {
     };
     return map[_extension(path)] ?? 'application/octet-stream';
   }
+}
+
+class _SenderSession {
+  const _SenderSession({
+    required this.ip,
+    required this.port,
+    required this.token,
+  });
+
+  final String ip;
+  final int port;
+  final String token;
 }

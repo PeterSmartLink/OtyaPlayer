@@ -1,7 +1,7 @@
 name: otya_player
-description: OTYA — a private, reliable Android media experience for video, music, transfer, files and local tools.
+description: Otya — a private, reliable Android media experience for video, music, transfer, files and local tools.
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.0+2
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -16,7 +16,7 @@ dependencies:
   # Android release builds are temporarily pinned to the reviewed upstream
   # disposal-order fix from media-kit PR #1424. That immutable revision keeps
   # the NativeCallable alive until mpv_terminate_destroy completes, preventing
-  # the SIGABRT seen in OTYA's Samsung Android 16 bug report. Replace this pin
+  # the SIGABRT seen in Otya's Samsung Android 16 bug report. Replace this pin
   # only after upstream ships an equivalent production fix.
   media_kit:
     git:
@@ -26,22 +26,28 @@ dependencies:
   media_kit_video: ^1.2.5
   media_kit_libs_android_video: ^1.3.2
 
-  # OTYA local media tools use a small first-party Android plugin so trim/audio
+  # Otya local media tools use a small first-party Android plugin so trim/audio
   # muxing can evolve independently from the playback/PiP/activity bridge.
   otya_media_tools:
     path: packages/otya_media_tools
+
+  # Otya Send owns its optional local-only hotspot/APK bridge in a separate
+  # first-party package. It is loaded only when Send needs Android APIs that
+  # Dart sockets cannot provide; playback never depends on this bridge.
+  otya_transfer_android:
+    path: packages/otya_transfer_android
 
   # Local Database
   hive: ^2.2.3
   hive_flutter: ^1.1.0
 
-  # Private media + local authentication. OTYA Private relies on Android's app
+  # Private media + local authentication. Otya Private relies on Android's app
   # sandbox/device storage encryption; crypto is used for local integrity/data
   # helpers rather than claiming a second custom file-encryption layer.
   crypto: ^3.0.5
   local_auth: ^2.3.0
 
-  # OTYA Transfer — pure Dart/local-network transport.
+  # Otya Send/Transfer — direct local-network transport and nearby QR pairing.
   qr_flutter: ^4.1.0
   mobile_scanner: ^6.0.0
 
@@ -63,7 +69,7 @@ dependencies:
   # Google account + private Google Drive App Folder backup.
   google_sign_in: ^6.2.1
 
-  # Device info — used for ABI detection + update checker
+  # Device info — used for ABI/update checks and Android-scoped Send permissions.
   device_info_plus: ^10.1.0
   package_info_plus: ^8.1.0
 
@@ -72,9 +78,9 @@ dependencies:
   permission_handler: ^11.3.1
   image_picker: ^1.1.2
 
-  # Firebase Android services. Cloudflare remains the OTYA control plane and
+  # Firebase Android services. Cloudflare remains the Otya control plane and
   # backend authority. These matched FlutterFire versions belong to the same
-  # firebase_core 3.15.2 generation already used by OTYA.
+  # firebase_core 3.15.2 generation already used by Otya.
   flutter_local_notifications: ^18.0.1
   firebase_core: ^3.15.2
   firebase_messaging: ^15.2.10
@@ -85,8 +91,8 @@ dependencies:
   # Secure storage for Private/account secrets and local PIN/session state.
   flutter_secure_storage: ^9.2.4
 
-  # Connectivity state only. OTYA Transfer uses Dart sockets/NetworkInterface
-  # and does not scan Wi-Fi networks or require location/nearby permissions.
+  # Connectivity state only. Otya Send still moves bytes over direct local
+  # sockets; the first-party bridge can create a local-only hotspot when needed.
   connectivity_plus: ^6.1.4
 
   # Utilities
@@ -100,7 +106,7 @@ dependencies:
   shared_preferences: ^2.3.5
 
   # Background audio + app-wide audio-focus policy. audio_session is declared
-  # directly because OTYA owns interruption/headphone routing behaviour rather
+  # directly because Otya owns interruption/headphone routing behaviour rather
   # than relying on transitive plugin defaults.
   audio_service: ^0.18.15
   audio_session: ^0.2.4
@@ -109,7 +115,7 @@ dependencies:
   webview_flutter: 4.9.0
   webview_flutter_android: 3.16.9
 
-# media_kit_video's published package declares media_kit from pub.dev. OTYA
+# media_kit_video's published package declares media_kit from pub.dev. Otya
 # intentionally uses the reviewed immutable Git revision above for the Android
 # disposal-order crash fix. Override transitive resolution to that exact same
 # revision so every MediaKit consumer uses one source/version graph.
@@ -133,10 +139,7 @@ flutter:
   uses-material-design: true
   generate: true
   assets:
-    - assets/icons/
     - assets/branding/
-    - assets/animations/
-    - assets/themes/
     - assets/onboarding/
   fonts:
     - family: Inter

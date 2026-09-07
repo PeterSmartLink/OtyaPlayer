@@ -536,7 +536,7 @@ class _MainShellState extends ConsumerState<_MainShell> {
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(12),
                         child: Image.asset(
-                          'assets/icons/play_store_512.png',
+                          'assets/branding/otya_app_icon.webp',
                           width: 40,
                           height: 40,
                         ),
@@ -645,7 +645,7 @@ class _RouteErrorScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('OTYA')),
+        appBar: AppBar(title: const Text('Otya')),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -658,7 +658,7 @@ class _RouteErrorScreen extends StatelessWidget {
                 const SizedBox(height: 16),
                 FilledButton(
                   onPressed: () => context.go('/'),
-                  child: const Text('Back to OTYA'),
+                  child: const Text('Back to Otya'),
                 ),
               ],
             ),

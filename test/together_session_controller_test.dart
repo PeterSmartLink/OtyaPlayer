@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:otya_player/features/together/application/together_policy.dart';
 import 'package:otya_player/features/together/application/together_session_controller.dart';
 import 'package:otya_player/features/together/domain/together_message.dart';
 import 'package:otya_player/features/together/domain/together_session.dart';
@@ -127,5 +128,62 @@ void main() {
 
     controller.markConversationRead();
     expect(controller.state.unreadMessages, 0);
+  });
+
+  test('production message invariants reject oversized text and invalid Moments', () {
+    final now = DateTime.utc(2026, 9, 5, 12);
+    final oversized = ''.padRight(TogetherMessage.maxTextLength + 1, 'x');
+
+    expect(
+      () => TogetherMessage(
+        id: 'large',
+        sessionId: 'room-1',
+        text: oversized,
+        kind: TogetherMessageKind.text,
+        createdAt: now,
+      ),
+      throwsArgumentError,
+    );
+
+    expect(
+      () => TogetherMessage(
+        id: 'moment',
+        sessionId: 'room-1',
+        text: 'Look here',
+        kind: TogetherMessageKind.moment,
+        createdAt: now,
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('long rooms retain only the newest bounded ephemeral transcript', () {
+    final now = DateTime.utc(2026, 9, 5, 12);
+    final controller = TogetherSessionController()..start(_session(now));
+    const total = TogetherPolicy.maxConversationMessagesV1 + 25;
+
+    for (var i = 0; i < total; i++) {
+      controller.receiveMessage(
+        TogetherMessage(
+          id: 'm$i',
+          sessionId: 'room-1',
+          text: 'message $i',
+          kind: TogetherMessageKind.text,
+          createdAt: now.add(Duration(milliseconds: i)),
+        ),
+        conversationVisible: false,
+      );
+    }
+
+    expect(
+      controller.state.messages,
+      hasLength(TogetherPolicy.maxConversationMessagesV1),
+    );
+    expect(controller.state.messages.first.id, 'm25');
+    expect(controller.state.messages.last.id, 'm${total - 1}');
+    expect(
+      controller.state.unreadMessages,
+      TogetherPolicy.maxConversationMessagesV1,
+    );
   });
 }

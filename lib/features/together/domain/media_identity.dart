@@ -33,11 +33,21 @@ class MediaByteRange {
   final int start;
   final int endExclusive;
 
-  const MediaByteRange({
+  MediaByteRange({
     required this.start,
     required this.endExclusive,
-  }) : assert(start >= 0),
-       assert(endExclusive > start);
+  }) {
+    if (start < 0) {
+      throw ArgumentError.value(start, 'start', 'Media range start must be non-negative.');
+    }
+    if (endExclusive <= start) {
+      throw ArgumentError.value(
+        endExclusive,
+        'endExclusive',
+        'Media range end must be greater than start.',
+      );
+    }
+  }
 
   int get length => endExclusive - start;
 

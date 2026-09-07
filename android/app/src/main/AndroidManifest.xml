@@ -2,6 +2,19 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.otyaplayer.app">
 
+    <!-- Otya uses product analytics/performance telemetry, not advertising
+         identity. Remove identifier permissions contributed transitively by
+         Google/Firebase manifests so release APKs keep a minimal privacy surface. -->
+    <uses-permission
+        android:name="com.google.android.gms.permission.AD_ID"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.ACCESS_ADSERVICES_AD_ID"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION"
+        tools:node="remove" />
+
     <!-- Local media library. Android 12 and below use READ_EXTERNAL_STORAGE;
          Android 13+ uses scoped audio/video permissions. -->
     <uses-permission

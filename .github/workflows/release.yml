@@ -1,17 +1,17 @@
-# Otya release pipeline
-# The first official product release remains Otya v1.0.0 while build numbers
-# may increase for fixes, polish, security and store delivery.
+# Otya production release pipeline.
+# Public version remains 1.0.0 while each published binary gets an immutable
+# build-specific tag such as v1.0.0+2.
 
 name: Release
 
 on:
   push:
     tags:
-      - 'v1.0.0'
+      - 'v1.0.0+*'
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing first-release tag to publish (v1.0.0 only)'
+        description: 'Existing immutable build tag to publish (for example v1.0.0+2)'
         required: true
         type: string
 
@@ -28,15 +28,15 @@ env:
 
 jobs:
   build_and_publish:
-    name: Build and publish Otya v1.0.0
+    name: Build and publish Otya 1.0.0
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 65
     environment: production
     permissions:
       contents: write
 
     steps:
-      - name: Get release version
+      - name: Resolve immutable release tag
         id: release
         shell: bash
         run: |
@@ -46,8 +46,8 @@ jobs:
           else
             TAG='${{ github.ref_name }}'
           fi
-          test "$TAG" = 'v1.0.0' || {
-            echo "ERROR: Otya's first official release is locked to v1.0.0; refusing $TAG"
+          [[ "$TAG" =~ ^v1\.0\.0\+[1-9][0-9]*$ ]] || {
+            echo "ERROR: Otya release tags must look like v1.0.0+2; refusing $TAG"
             exit 1
           }
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
@@ -70,30 +70,18 @@ jobs:
         run: |
           set -euo pipefail
           required=(
-            KEYSTORE_BASE64
-            STORE_PASSWORD
-            KEY_ALIAS
-            KEY_PASSWORD
-            FIREBASE_API_KEY
-            R2_ACCESS_KEY_ID
-            R2_SECRET_ACCESS_KEY
-            R2_ENDPOINT
-            R2_BUCKET
-            WORKER_URL
-            CF_ACCOUNT_ID
-            CF_API_TOKEN
+            KEYSTORE_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD FIREBASE_API_KEY
+            R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_ENDPOINT R2_BUCKET
+            WORKER_URL CF_ACCOUNT_ID CF_API_TOKEN
           )
           missing=()
           for name in "${required[@]}"; do
-            if [ -z "${!name:-}" ]; then
-              missing+=("$name")
-            fi
+            [ -n "${!name:-}" ] || missing+=("$name")
           done
           if [ "${#missing[@]}" -ne 0 ]; then
             printf 'ERROR: Missing production release configuration: %s\n' "${missing[*]}"
             exit 1
           fi
-          echo "Production release configuration is present."
 
       - name: Free disk space
         uses: jlumbroso/free-disk-space@main
@@ -106,60 +94,43 @@ jobs:
           docker-images: true
           swap-storage: true
 
-      - name: Checkout
+      - name: Checkout release source
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && 'refs/heads/main' || github.ref }}
 
-      - name: Check immutable first-release identity
+      - name: Prove tag, main and pubspec are the same build
         shell: bash
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           set -euo pipefail
-          test "$RELEASE_TAG" = 'v1.0.0' || {
-            echo "ERROR: unexpected release tag $RELEASE_TAG"
-            exit 1
-          }
+          git fetch origin refs/heads/main:refs/remotes/origin/main --force
           git rev-parse -q --verify "refs/tags/$RELEASE_TAG" >/dev/null || {
             echo "ERROR: release tag $RELEASE_TAG does not exist"
             exit 1
           }
 
-          git fetch origin refs/heads/main:refs/remotes/origin/main --force
           HEAD_SHA="$(git rev-parse HEAD)"
           MAIN_SHA="$(git rev-parse refs/remotes/origin/main)"
           TAG_SHA="$(git rev-list -n 1 "$RELEASE_TAG")"
-
           test "$HEAD_SHA" = "$MAIN_SHA" || {
-            echo "ERROR: release checkout must be current main; checkout=$HEAD_SHA main=$MAIN_SHA"
+            echo "ERROR: release checkout is not current main; checkout=$HEAD_SHA main=$MAIN_SHA"
             exit 1
           }
           test "$TAG_SHA" = "$MAIN_SHA" || {
-            echo "ERROR: refusing to publish because $RELEASE_TAG does not already point to current main; tag=$TAG_SHA main=$MAIN_SHA"
-            echo "Align the release tag explicitly before starting the publish workflow. The workflow will not move tags."
+            echo "ERROR: immutable tag $RELEASE_TAG does not point to current main"
             exit 1
           }
 
           APP_VERSION="$(awk '/^version:[[:space:]]*/ { print $2; exit }' pubspec.yaml)"
-          test -n "$APP_VERSION" || {
-            echo "ERROR: pubspec.yaml version is missing"
+          test "$APP_VERSION" = "${RELEASE_TAG#v}" || {
+            echo "ERROR: tag $RELEASE_TAG does not exactly match pubspec version $APP_VERSION"
             exit 1
           }
           [[ "$APP_VERSION" =~ ^1\.0\.0\+[1-9][0-9]*$ ]] || {
-            echo "ERROR: Otya first-release builds must stay 1.0.0+<positive build>; found $APP_VERSION"
-            exit 1
-          }
-          VERSION_NAME="${APP_VERSION%%+*}"
-          BUILD_NUMBER="${APP_VERSION##*+}"
-          EXPECTED_VERSION="${RELEASE_TAG#v}"
-          test "$VERSION_NAME" = "$EXPECTED_VERSION" || {
-            echo "ERROR: release tag $RELEASE_TAG does not match pubspec version $VERSION_NAME"
-            exit 1
-          }
-          [[ "$BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]] || {
-            echo "ERROR: release build number must be a positive integer"
+            echo "ERROR: expected Otya 1.0.0+<positive build>; found $APP_VERSION"
             exit 1
           }
 
@@ -177,35 +148,36 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Cache Pub packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.pub-cache
-          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
-          restore-keys: |
-            pub-${{ runner.os }}-
-
-      - name: Install dependencies
+      - name: Install locked dependencies and publisher tools
         shell: bash
         run: |
           set -euo pipefail
           pip install awscli --quiet
+          test -s pubspec.lock || { echo 'ERROR: committed pubspec.lock is missing'; exit 1; }
+          BEFORE="$(sha256sum pubspec.lock | awk '{print $1}')"
           flutter pub get
+          AFTER="$(sha256sum pubspec.lock | awk '{print $1}')"
+          test "$BEFORE" = "$AFTER" || {
+            git diff -- pubspec.lock
+            echo 'ERROR: flutter pub get changed the committed dependency graph'
+            exit 1
+          }
+          git diff --exit-code -- pubspec.lock
 
       - name: Generate code
         run: dart run build_runner build --delete-conflicting-outputs
 
-      - name: Check code
+      - name: Analyze
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build
           flutter analyze 2>&1 | tee build/flutter-analyze-release.log
 
-      - name: Run tests
+      - name: Test
         run: flutter test
 
-      - name: Load signing key
+      - name: Load official signing key
         shell: bash
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -213,63 +185,52 @@ jobs:
           set -euo pipefail
           printf '%s' "$KEYSTORE_BASE64" | base64 -d > android/app/keystore.jks
           test -s android/app/keystore.jks || {
-            echo "ERROR: Release signing key is empty"
+            echo "ERROR: release signing key is empty"
             exit 1
           }
 
-      - name: Build release artifacts
+      - name: Build APKs and Play bundle from one production configuration
+        shell: bash
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/android/app/keystore.jks
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
-        shell: bash
         run: |
           set -euo pipefail
-          GOOGLE_WEB_CLIENT_ID='82776565585-obr8k53b8n6djsggissv8qne81cm3u5u.apps.googleusercontent.com'
-          FIREBASE_APP_ID='1:82776565585:android:085cf9b4eecb76e9535570'
-          FIREBASE_MESSAGING_SENDER_ID='82776565585'
-          FIREBASE_PROJECT_ID='otya-player'
+          rm -rf build/app/outputs/flutter-apk build/app/outputs/bundle build/release build/debug-info
+          source scripts/android-release-config.sh
 
-          COMMON_DEFINES=(
-            --dart-define=GOOGLE_WEB_CLIENT_ID="$GOOGLE_WEB_CLIENT_ID"
-            --dart-define=FIREBASE_API_KEY="$FIREBASE_API_KEY"
-            --dart-define=FIREBASE_APP_ID="$FIREBASE_APP_ID"
-            --dart-define=FIREBASE_MESSAGING_SENDER_ID="$FIREBASE_MESSAGING_SENDER_ID"
-            --dart-define=FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID"
-          )
-
-          rm -rf build/app/outputs/flutter-apk build/app/outputs/bundle build/release
+          configure_otya_release_defines true
           flutter build apk --release --split-per-abi \
             --target-platform android-arm,android-arm64 \
-            --split-debug-info=build/debug-info \
-            --dart-define=SELF_UPDATE=true \
-            "${COMMON_DEFINES[@]}"
+            --split-debug-info=build/debug-info/apk \
+            "${OTYA_RELEASE_DART_DEFINES[@]}"
 
+          configure_otya_release_defines false
           flutter build appbundle --release \
-            --split-debug-info=build/debug-info \
-            --dart-define=SELF_UPDATE=false \
-            "${COMMON_DEFINES[@]}"
+            --split-debug-info=build/debug-info/aab \
+            "${OTYA_RELEASE_DART_DEFINES[@]}"
 
-      - name: Name and verify Otya files
+      - name: Name, verify and fingerprint publication artifacts
         id: artifacts
+        shell: bash
         env:
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-        shell: bash
         run: |
           set -euo pipefail
           APK_DIR=build/app/outputs/flutter-apk
-          RAW_AAB=build/app/outputs/bundle/release/app-release.aab
           RAW_ARM64="$APK_DIR/app-arm64-v8a-release.apk"
           RAW_ARM32="$APK_DIR/app-armeabi-v7a-release.apk"
+          RAW_AAB=build/app/outputs/bundle/release/app-release.aab
           OUT=build/release
           mkdir -p "$OUT"
 
-          test -f "$RAW_ARM64" || { echo "ERROR: arm64 APK not found"; exit 1; }
-          test -f "$RAW_ARM32" || { echo "ERROR: arm32 APK not found"; exit 1; }
-          test -f "$RAW_AAB" || { echo "ERROR: app bundle not found"; exit 1; }
+          test -s "$RAW_ARM64" || { echo "ERROR: arm64 APK missing"; exit 1; }
+          test -s "$RAW_ARM32" || { echo "ERROR: arm32 APK missing"; exit 1; }
+          test -s "$RAW_AAB" || { echo "ERROR: AAB missing"; exit 1; }
 
           cp "$RAW_ARM64" "$OUT/Otya-arm64.apk"
           cp "$RAW_ARM32" "$OUT/Otya-arm32.apk"
@@ -278,21 +239,16 @@ jobs:
           ARM64="$OUT/Otya-arm64.apk"
           ARM32="$OUT/Otya-arm32.apk"
           AAB="$OUT/Otya.aab"
-          ARM64_REPORT="$OUT/Otya-arm64-signing.txt"
-          ARM32_REPORT="$OUT/Otya-arm32-signing.txt"
-          AAB_REPORT="$OUT/Otya-aab-signing.txt"
 
-          [ "$(stat -c%s "$ARM64")" -gt 5000000 ] || { echo "ERROR: arm64 APK is too small"; exit 1; }
-          [ "$(stat -c%s "$ARM32")" -gt 5000000 ] || { echo "ERROR: arm32 APK is too small"; exit 1; }
-          [ "$(stat -c%s "$AAB")" -gt 5000000 ] || { echo "ERROR: app bundle is too small"; exit 1; }
+          # The same final-binary checks used by PR release validation must pass
+          # on the exact APKs that are about to be published.
+          bash scripts/verify-android-release-apk.sh "$ARM64" "$OUT/evidence-arm64"
+          bash scripts/verify-android-release-apk.sh "$ARM32" "$OUT/evidence-arm32"
 
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner -print | sort -V | tail -n 1)"
-          test -n "$APKSIGNER" && test -x "$APKSIGNER" || {
-            echo "ERROR: Android apksigner was not found"
-            exit 1
-          }
-          "$APKSIGNER" verify --verbose --print-certs "$ARM64" | tee "$ARM64_REPORT"
-          "$APKSIGNER" verify --verbose --print-certs "$ARM32" | tee "$ARM32_REPORT"
+          test -x "$APKSIGNER" || { echo "ERROR: apksigner not found"; exit 1; }
+          "$APKSIGNER" verify --verbose --print-certs "$ARM64" | tee "$OUT/Otya-arm64-signing.txt"
+          "$APKSIGNER" verify --verbose --print-certs "$ARM32" | tee "$OUT/Otya-arm32-signing.txt"
 
           EXPECTED_SHA256="$(keytool -list -v \
             -keystore android/app/keystore.jks \
@@ -302,38 +258,23 @@ jobs:
             | head -n 1 \
             | tr -d ':[:space:]' \
             | tr '[:upper:]' '[:lower:]')"
-          test -n "$EXPECTED_SHA256" || {
-            echo "ERROR: expected signing certificate is unavailable"
-            exit 1
-          }
+          test -n "$EXPECTED_SHA256" || { echo "ERROR: official signing certificate unavailable"; exit 1; }
 
-          for REPORT in "$ARM64_REPORT" "$ARM32_REPORT"; do
+          for REPORT in "$OUT/Otya-arm64-signing.txt" "$OUT/Otya-arm32-signing.txt"; do
             ACTUAL_SHA256="$(sed -n 's/^.*certificate SHA-256 digest: //p' "$REPORT" \
-              | head -n 1 \
-              | tr -d ':[:space:]' \
-              | tr '[:upper:]' '[:lower:]')"
-            test -n "$ACTUAL_SHA256" || {
-              echo "ERROR: APK signing certificate was not reported"
-              exit 1
-            }
-            test "$EXPECTED_SHA256" = "$ACTUAL_SHA256" || {
-              echo "ERROR: release APK certificate does not match the configured Otya signing key"
+              | head -n 1 | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
+            test "$ACTUAL_SHA256" = "$EXPECTED_SHA256" || {
+              echo "ERROR: APK certificate does not match official Otya signing key"
               exit 1
             }
           done
 
-          jarsigner -verify "$AAB" | tee "$AAB_REPORT"
-          keytool -printcert -jarfile "$AAB" >> "$AAB_REPORT"
-          AAB_SHA256="$(sed -n 's/^[[:space:]]*SHA256: //p' "$AAB_REPORT" \
-            | head -n 1 \
-            | tr -d ':[:space:]' \
-            | tr '[:upper:]' '[:lower:]')"
-          test -n "$AAB_SHA256" || {
-            echo "ERROR: app bundle signing certificate was not reported"
-            exit 1
-          }
-          test "$EXPECTED_SHA256" = "$AAB_SHA256" || {
-            echo "ERROR: app bundle certificate does not match the configured Otya signing key"
+          jarsigner -verify "$AAB" | tee "$OUT/Otya-aab-signing.txt"
+          keytool -printcert -jarfile "$AAB" >> "$OUT/Otya-aab-signing.txt"
+          AAB_SHA256="$(sed -n 's/^[[:space:]]*SHA256: //p' "$OUT/Otya-aab-signing.txt" \
+            | head -n 1 | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
+          test "$AAB_SHA256" = "$EXPECTED_SHA256" || {
+            echo "ERROR: AAB certificate does not match official Otya signing key"
             exit 1
           }
 
@@ -342,27 +283,18 @@ jobs:
           echo "arm32=$ARM32" >> "$GITHUB_OUTPUT"
           echo "aab=$AAB" >> "$GITHUB_OUTPUT"
           echo "checksums=$OUT/checksums.txt" >> "$GITHUB_OUTPUT"
-          echo "arm64_signing=$ARM64_REPORT" >> "$GITHUB_OUTPUT"
-          echo "arm32_signing=$ARM32_REPORT" >> "$GITHUB_OUTPUT"
-          echo "aab_signing=$AAB_REPORT" >> "$GITHUB_OUTPUT"
 
-      - name: Save Otya release files
+      - name: Save exact release evidence
         uses: actions/upload-artifact@v4
         with:
           name: Otya-${{ steps.release.outputs.tag }}
           if-no-files-found: error
           retention-days: 30
           path: |
-            ${{ steps.artifacts.outputs.arm64 }}
-            ${{ steps.artifacts.outputs.arm32 }}
-            ${{ steps.artifacts.outputs.aab }}
-            ${{ steps.artifacts.outputs.checksums }}
-            ${{ steps.artifacts.outputs.arm64_signing }}
-            ${{ steps.artifacts.outputs.arm32_signing }}
-            ${{ steps.artifacts.outputs.aab_signing }}
+            build/release/**
             build/flutter-analyze-release.log
 
-      - name: Publish Otya APKs
+      - name: Publish verified APKs to R2 and release control plane
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -377,7 +309,7 @@ jobs:
           ARM32_APK: ${{ steps.artifacts.outputs.arm32 }}
         run: bash scripts/publish_r2.sh
 
-      - name: Create Otya release
+      - name: Create GitHub release from the same verified files
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release.outputs.tag }}
@@ -390,6 +322,6 @@ jobs:
             ${{ steps.artifacts.outputs.aab }}
             ${{ steps.artifacts.outputs.checksums }}
 
-      - name: Remove signing key
+      - name: Remove signing material
         if: always()
         run: rm -f android/app/keystore.jks

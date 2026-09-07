@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../shared/widgets/otya_logo.dart';
-import '../config/environment.dart';
 import '../services/update_service.dart';
 
 /// Single-purpose Otya update dialog.
@@ -75,13 +74,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
       _error = null;
     });
 
-    final raw = widget.info.downloadUrl.isNotEmpty
-        ? widget.info.downloadUrl
-        : widget.info.directUrl.isNotEmpty
-            ? widget.info.directUrl
-            : Environment.downloadUrl;
-    final uri = Uri.tryParse(raw);
-
+    final uri = Uri.tryParse(widget.info.downloadUrl);
     if (uri == null ||
         uri.scheme != 'https' ||
         !_officialHosts.contains(uri.host.toLowerCase()) ||
@@ -95,22 +88,13 @@ class _UpdateDialogState extends State<UpdateDialog> {
       return;
     }
 
-    try {
-      final opened = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
-      if (!opened && mounted) {
-        setState(() => _error = 'Could not open the official Otya update page.');
-      }
-      if (opened && mounted) Navigator.of(context).pop();
-    } catch (_) {
-      if (mounted) {
-        setState(() => _error = 'Could not open the official Otya update page.');
-      }
-    } finally {
-      if (mounted) setState(() => _opening = false);
-    }
+    final router = GoRouter.of(context);
+    Navigator.of(context).pop();
+    await Future<void>.delayed(Duration.zero);
+    router.push(
+      '/webview',
+      extra: {'url': uri.toString(), 'title': 'Update Otya'},
+    );
   }
 
   Future<void> _later() async {
@@ -161,8 +145,8 @@ class _UpdateDialogState extends State<UpdateDialog> {
             ],
             const SizedBox(height: 14),
             Text(
-              'Otya will open the official PeterSmart Link update destination. '
-              'The app does not silently install packages or require installer permission.',
+              'Otya opens the official PeterSmart Link update page inside the app. '
+              'When you choose the APK, Android handles the download/install step; Otya never silently installs packages.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             if (_error != null) ...[
@@ -196,7 +180,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.open_in_new_rounded),
-          label: Text(_opening ? 'Opening…' : 'Update'),
+          label: Text(_opening ? 'Opening…' : 'View update'),
         ),
       ],
     );

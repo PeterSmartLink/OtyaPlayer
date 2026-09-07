@@ -1,9 +1,10 @@
-/// Canonical network boundary for OTYA Transfer and its internal Together proxy.
+/// Canonical network boundary for Otya Transfer and its internal Together proxy.
 ///
-/// OTYA deliberately uses cleartext HTTP only on a nearby private IPv4 network
+/// Otya deliberately uses cleartext HTTP only on a nearby private IPv4 network
 /// or on this device's IPv4 loopback. Keep all URI/host acceptance rules here
 /// so presentation, peer discovery, playback and the downloader cannot drift.
 final RegExp _transferTokenPattern = RegExp(r'^[a-f0-9]{64}$');
+final RegExp _indexedMediaPathPattern = RegExp(r'^/media/[0-9]+$');
 
 bool isPrivateTransferIpv4Host(
   String host, {
@@ -36,24 +37,34 @@ bool isLoopbackTransferIpv4Host(String host) {
   return octets[0] == 127;
 }
 
+/// Accepts authenticated media payload URLs and the internal Together proxy.
+///
+/// Single-file Send keeps `/media` for backwards compatibility. Batch Send
+/// serves each selected item from `/media/<index>` using the same one-time token.
 bool isAllowedTransferUri(Uri uri) {
   if (uri.path == '/together-stream') {
     return _isAllowedTogetherLoopbackUri(uri);
   }
 
-  // Keep the original Transfer boundary explicit. Nearby Transfer accepts only
-  // OTYA's authenticated /media endpoint on a private IPv4 host.
-  if (uri.scheme != 'http' ||
-      uri.path != '/media' ||
-      uri.userInfo.isNotEmpty ||
-      uri.fragment.isNotEmpty ||
-      uri.port <= 0 ||
-      uri.port > 65535 ||
-      !isPrivateTransferIpv4Host(uri.host)) {
-    return false;
-  }
-
+  final isMediaPath =
+      uri.path == '/media' || _indexedMediaPathPattern.hasMatch(uri.path);
+  if (!isMediaPath || !_isAllowedNearbyBase(uri)) return false;
   return _hasValidTransferToken(uri);
+}
+
+/// Accepts only the authenticated batch manifest URL shown in an Otya Send QR.
+bool isAllowedTransferBatchUri(Uri uri) {
+  if (uri.path != '/batch' || !_isAllowedNearbyBase(uri)) return false;
+  return _hasValidTransferToken(uri);
+}
+
+bool _isAllowedNearbyBase(Uri uri) {
+  return uri.scheme == 'http' &&
+      uri.userInfo.isEmpty &&
+      uri.fragment.isEmpty &&
+      uri.port > 0 &&
+      uri.port <= 65535 &&
+      isPrivateTransferIpv4Host(uri.host);
 }
 
 bool _isAllowedTogetherLoopbackUri(Uri uri) {

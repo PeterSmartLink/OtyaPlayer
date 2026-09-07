@@ -1,0 +1,161 @@
+name: Validate Otya release mode
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: release-mode-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Xmx4g"
+
+jobs:
+  release_mode:
+    name: Build release-mode publication candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Block tracked secrets and signing material
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-files | grep -E '(^|/)(google-services.*\.json|.*firebase-adminsdk.*\.json|.*service-account.*\.json|.*\.jks|.*\.keystore|.*\.p12|.*\.pem)$'; then
+            echo 'ERROR: private credentials/signing files must not be tracked'
+            exit 1
+          fi
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.32.x"
+          channel: stable
+          cache: true
+
+      - name: Install locked dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s pubspec.lock || { echo 'ERROR: committed pubspec.lock is missing'; exit 1; }
+          BEFORE="$(sha256sum pubspec.lock | awk '{print $1}')"
+          flutter pub get
+          AFTER="$(sha256sum pubspec.lock | awk '{print $1}')"
+          test "$BEFORE" = "$AFTER" || {
+            git diff -- pubspec.lock
+            echo 'ERROR: flutter pub get changed the committed dependency graph'
+            exit 1
+          }
+          git diff --exit-code -- pubspec.lock
+
+      - name: Generate code
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Ensure Android debug key exists for non-publishable release-mode test
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.android"
+          if [ ! -s "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -v \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname 'CN=Android Debug,O=Android,C=US'
+          fi
+
+      - name: Build release-mode ARM64 split APK with production runtime config
+        env:
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          OTYA_ALLOW_DEBUG_SIGNING: 'true'
+          OTYA_SELF_UPDATE: 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          source scripts/android-release-config.sh
+          mkdir -p build/release-mode-evidence
+
+          max_attempts=3
+          attempt=1
+          while true; do
+            log="build/release-mode-evidence/build-attempt-${attempt}.log"
+            set +e
+            flutter build apk --release --split-per-abi \
+              --target-platform android-arm64 \
+              "${OTYA_RELEASE_DART_DEFINES[@]}" 2>&1 | tee "$log"
+            status=${PIPESTATUS[0]}
+            set -e
+
+            if [ "$status" -eq 0 ]; then
+              printf '%s\n' "$attempt" > build/release-mode-evidence/successful-build-attempt.txt
+              break
+            fi
+
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "ERROR: release-mode build failed after ${attempt} attempts"
+              exit "$status"
+            fi
+
+            # Retry only failures that look like temporary upstream/network
+            # availability problems. Compiler, Gradle configuration, resource,
+            # R8 and source failures remain deterministic release blockers.
+            if ! grep -Eqi \
+              'HTTP response code: (408|429|5[0-9]{2})|HTTP (408|429|5[0-9]{2})|timed? out|timeout|connection (reset|refused|closed)|temporary failure|could not resolve host|name or service not known|network is unreachable|remote host terminated' \
+              "$log"; then
+              echo "ERROR: deterministic release-mode build failure; not retrying"
+              exit "$status"
+            fi
+
+            delay=$((attempt * 10))
+            echo "Transient upstream/network failure detected; retrying in ${delay}s (${attempt}/${max_attempts})"
+            sleep "$delay"
+            attempt=$((attempt + 1))
+          done
+
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk build/Otya-release-mode-test.apk
+
+      - name: Verify final release-mode Android binary and size budget
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=build/Otya-release-mode-test.apk
+          SIZE="$(stat -c%s "$APK")"
+          printf '%s\n' "$SIZE" > build/release-mode-evidence/apk-size-bytes.txt
+          test "$SIZE" -le 40000000 || {
+            echo "ERROR: ARM64 publication-equivalent APK is $SIZE bytes; Otya budget is 40000000 bytes"
+            exit 1
+          }
+          bash scripts/verify-android-release-apk.sh \
+            "$APK" \
+            build/release-mode-evidence
+
+      - name: Save release-mode evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Otya-release-mode-validation
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            build/Otya-release-mode-test.apk
+            build/release-mode-evidence/**
