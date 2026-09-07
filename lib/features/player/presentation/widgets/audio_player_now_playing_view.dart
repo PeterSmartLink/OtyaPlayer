@@ -68,7 +68,7 @@ class _AudioPlayerNowPlayingView extends StatelessWidget {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 4, 8, 2),
+              padding: const EdgeInsets.fromLTRB(8, 2, 8, 0),
               child: Row(
                 children: [
                   IconButton(
@@ -125,21 +125,21 @@ class _AudioPlayerNowPlayingView extends StatelessWidget {
               child: Padding(
                 padding: EdgeInsets.symmetric(
                   horizontal: artPadding,
-                  vertical: 8,
+                  vertical: 5,
                 ),
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(30),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.brandBlue.withValues(alpha: .22),
+                        color: AppColors.brandBlue.withValues(alpha: .25),
                         blurRadius: 30,
                         spreadRadius: 2,
-                        offset: const Offset(0, 14),
+                        offset: const Offset(0, 12),
                       ),
                       BoxShadow(
-                        color: AppColors.brandCyan.withValues(alpha: .08),
-                        blurRadius: 18,
+                        color: AppColors.brandCyan.withValues(alpha: .12),
+                        blurRadius: 20,
                         spreadRadius: 1,
                       ),
                     ],
@@ -159,21 +159,29 @@ class _AudioPlayerNowPlayingView extends StatelessWidget {
             ),
             SizedBox(height: spacing),
             Container(
-              margin: const EdgeInsets.symmetric(horizontal: 18),
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 11),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    AppColors.surfaceElevated.withValues(alpha: .92),
-                    AppColors.surface.withValues(alpha: .82),
+                    AppColors.surfaceElevated.withValues(alpha: .96),
+                    AppColors.surface.withValues(alpha: .90),
+                    AppColors.brandDeepBlue.withValues(alpha: .12),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(
-                  color: AppColors.brandBlue.withValues(alpha: .16),
+                  color: AppColors.brandCyan.withValues(alpha: .18),
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.brandBlue.withValues(alpha: .10),
+                    blurRadius: 20,
+                    spreadRadius: -7,
+                  ),
+                ],
               ),
               child: Column(
                 children: [
@@ -257,10 +265,10 @@ class _AudioPlayerNowPlayingView extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 13),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: AppColors.surfaceElevated.withValues(alpha: .86),
+                        color: AppColors.surfaceElevated.withValues(alpha: .90),
                         borderRadius: BorderRadius.circular(13),
                         border: Border.all(
-                          color: AppColors.brandBlue.withValues(alpha: .18),
+                          color: AppColors.brandCyan.withValues(alpha: .16),
                         ),
                       ),
                       child: Text(
@@ -422,7 +430,7 @@ class _AudioPlayerNowPlayingView extends StatelessWidget {
                 ),
               ),
             ),
-            SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
+            const SizedBox(height: 8),
           ],
         ),
       ),
