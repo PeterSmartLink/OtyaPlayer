@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -52,6 +53,18 @@ abstract final class NearbyTogetherProtocol {
   static const int version = 1;
   static const int maxMessageBytes = 8 * 1024;
 
+  /// Real-time playback state and clock probes are intentionally lossy. They
+  /// are refreshed frequently and retrying stale samples would make sync worse.
+  /// User-visible/session-critical messages use acknowledgement + retry.
+  static const Set<String> reliableTypes = {
+    'hello',
+    'ready',
+    'media',
+    'chat',
+    'moment',
+    'reaction',
+  };
+
   static const Set<String> allowedTypes = {
     'hello',
     'ready',
@@ -62,8 +75,12 @@ abstract final class NearbyTogetherProtocol {
     'reaction',
     'ping',
     'pong',
+    'ack',
     'bye',
   };
+
+  static bool requiresAck(String type) =>
+      reliableTypes.contains(type.trim().toLowerCase());
 
   static String encode(String type, Map<String, dynamic> payload) {
     final normalized = type.trim().toLowerCase();
@@ -105,9 +122,21 @@ abstract final class NearbyTogetherProtocol {
   }
 }
 
+class _PendingNearbyMessage {
+  final String encoded;
+  final Completer<void> completer = Completer<void>();
+  int attempts = 1;
+  Timer? retryTimer;
+
+  _PendingNearbyMessage(this.encoded);
+}
+
 class NearbyTogetherHost {
   static const String _path = '/together';
   static final RegExp _tokenPattern = RegExp(r'^[a-f0-9]{64}$');
+  static const Duration _ackTimeout = Duration(milliseconds: 850);
+  static const int _maxDeliveryAttempts = 4;
+  static const int _maxSeenReliableIds = 256;
 
   HttpServer? _server;
   WebSocket? _guest;
@@ -118,6 +147,8 @@ class NearbyTogetherHost {
   Uri? _hostMediaUrl;
   final _messages = StreamController<NearbyTogetherMessage>.broadcast();
   final _connections = StreamController<bool>.broadcast();
+  final Map<String, _PendingNearbyMessage> _pending = {};
+  final LinkedHashSet<String> _seenReliableIds = LinkedHashSet<String>();
 
   Stream<NearbyTogetherMessage> get messages => _messages.stream;
   Stream<bool> get connected => _connections.stream;
@@ -224,33 +255,79 @@ class NearbyTogetherHost {
       return;
     }
 
+    _failPending('Nearby Together peer changed.');
+    _seenReliableIds.clear();
     _guest = socket;
     _connections.add(true);
     socket.pingInterval = const Duration(seconds: 20);
 
-    await _sendSocket(socket, 'hello', {
-      'display_name': displayName,
-      if (_username != null && _username!.isNotEmpty) 'username': _username,
-      'media': _mediaJson(media),
-      'media_url': hostMediaUrl.toString(),
-    });
-
+    // Listen before the reliable hello is sent so a fast LAN acknowledgement
+    // cannot race past the socket listener.
     socket.listen(
-      _acceptMessage,
+      (raw) => _acceptMessage(socket, raw),
       onDone: () => _guestDisconnected(socket),
       onError: (_) => _guestDisconnected(socket),
       cancelOnError: true,
     );
+
+    try {
+      await _sendSocket(socket, 'hello', {
+        'display_name': displayName,
+        if (_username != null && _username!.isNotEmpty) 'username': _username,
+        'media': _mediaJson(media),
+        'media_url': hostMediaUrl.toString(),
+      });
+    } catch (_) {
+      await _closeForDeliveryFailure(socket);
+    }
   }
 
-  void _acceptMessage(Object? raw) {
+  void _acceptMessage(WebSocket socket, Object? raw) {
     final message = NearbyTogetherProtocol.decode(raw);
-    if (message != null && !_messages.isClosed) _messages.add(message);
+    if (message == null) return;
+
+    if (message.type == 'ack') {
+      _acceptAck(message);
+      return;
+    }
+
+    if (NearbyTogetherProtocol.requiresAck(message.type)) {
+      _sendAck(socket, message.id);
+      if (!_rememberReliableId(message.id)) return;
+    }
+
+    if (!_messages.isClosed) _messages.add(message);
+  }
+
+  void _acceptAck(NearbyTogetherMessage message) {
+    final rawId = message.payload['message_id'];
+    if (rawId is! String || rawId.isEmpty) return;
+    final pending = _pending.remove(rawId);
+    if (pending == null) return;
+    pending.retryTimer?.cancel();
+    if (!pending.completer.isCompleted) pending.completer.complete();
+  }
+
+  void _sendAck(WebSocket socket, String messageId) {
+    if (socket.readyState != WebSocket.open) return;
+    try {
+      socket.add(NearbyTogetherProtocol.encode('ack', {'message_id': messageId}));
+    } catch (_) {}
+  }
+
+  bool _rememberReliableId(String id) {
+    if (!_seenReliableIds.add(id)) return false;
+    if (_seenReliableIds.length > _maxSeenReliableIds) {
+      _seenReliableIds.remove(_seenReliableIds.first);
+    }
+    return true;
   }
 
   void _guestDisconnected(WebSocket socket) {
     if (identical(_guest, socket)) {
       _guest = null;
+      _failPending('Nearby Together guest disconnected.');
+      _seenReliableIds.clear();
       if (!_connections.isClosed) _connections.add(false);
     }
   }
@@ -271,12 +348,87 @@ class NearbyTogetherHost {
     if (socket.readyState != WebSocket.open) {
       throw StateError('Nearby Together socket is closed.');
     }
-    socket.add(NearbyTogetherProtocol.encode(type, payload));
+
+    final encoded = NearbyTogetherProtocol.encode(type, payload);
+    if (!NearbyTogetherProtocol.requiresAck(type)) {
+      socket.add(encoded);
+      return;
+    }
+
+    final decoded = NearbyTogetherProtocol.decode(encoded);
+    if (decoded == null) {
+      throw StateError('OTYA could not prepare a Together message.');
+    }
+
+    final pending = _PendingNearbyMessage(encoded);
+    _pending[decoded.id] = pending;
+    socket.add(encoded);
+    _scheduleRetry(socket, decoded.id, pending);
+    return pending.completer.future;
+  }
+
+  void _scheduleRetry(
+    WebSocket socket,
+    String messageId,
+    _PendingNearbyMessage pending,
+  ) {
+    pending.retryTimer?.cancel();
+    pending.retryTimer = Timer(_ackTimeout, () {
+      if (_pending[messageId] != pending || pending.completer.isCompleted) return;
+      if (!identical(_guest, socket) || socket.readyState != WebSocket.open) {
+        _pending.remove(messageId);
+        if (!pending.completer.isCompleted) {
+          pending.completer.completeError(
+            StateError('Nearby Together disconnected before delivery was confirmed.'),
+          );
+        }
+        return;
+      }
+      if (pending.attempts >= _maxDeliveryAttempts) {
+        _pending.remove(messageId);
+        if (!pending.completer.isCompleted) {
+          pending.completer.completeError(
+            TimeoutException('Nearby Together delivery was not acknowledged.'),
+          );
+        }
+        unawaited(_closeForDeliveryFailure(socket));
+        return;
+      }
+
+      pending.attempts += 1;
+      socket.add(pending.encoded);
+      _scheduleRetry(socket, messageId, pending);
+    });
+  }
+
+  Future<void> _closeForDeliveryFailure(WebSocket socket) async {
+    if (socket.readyState == WebSocket.open) {
+      try {
+        await socket.close(
+          WebSocketStatus.goingAway,
+          'Together delivery timed out',
+        );
+      } catch (_) {}
+    }
+    _guestDisconnected(socket);
+  }
+
+  void _failPending(String reason) {
+    final pendingMessages = _pending.values.toList(growable: false);
+    _pending.clear();
+    for (final pending in pendingMessages) {
+      pending.retryTimer?.cancel();
+      if (!pending.completer.isCompleted) {
+        pending.completer.completeError(StateError(reason));
+      }
+    }
   }
 
   Future<void> stop() async {
     final guest = _guest;
     _guest = null;
+    _failPending('Nearby Together stopped.');
+    _seenReliableIds.clear();
     if (guest != null) {
       try {
         guest.add(NearbyTogetherProtocol.encode('bye', const {}));
@@ -350,9 +502,15 @@ class NearbyTogetherHost {
 }
 
 class NearbyTogetherGuest {
+  static const Duration _ackTimeout = Duration(milliseconds: 850);
+  static const int _maxDeliveryAttempts = 4;
+  static const int _maxSeenReliableIds = 256;
+
   WebSocket? _socket;
   final _messages = StreamController<NearbyTogetherMessage>.broadcast();
   final _connections = StreamController<bool>.broadcast();
+  final Map<String, _PendingNearbyMessage> _pending = {};
+  final LinkedHashSet<String> _seenReliableIds = LinkedHashSet<String>();
 
   Stream<NearbyTogetherMessage> get messages => _messages.stream;
   Stream<bool> get connected => _connections.stream;
@@ -369,16 +527,55 @@ class NearbyTogetherGuest {
     );
     socket.pingInterval = const Duration(seconds: 20);
     _socket = socket;
+    _seenReliableIds.clear();
     _connections.add(true);
     socket.listen(
-      (raw) {
-        final message = NearbyTogetherProtocol.decode(raw);
-        if (message != null && !_messages.isClosed) _messages.add(message);
-      },
+      (raw) => _acceptMessage(socket, raw),
       onDone: () => _disconnected(socket),
       onError: (_) => _disconnected(socket),
       cancelOnError: true,
     );
+  }
+
+  void _acceptMessage(WebSocket socket, Object? raw) {
+    final message = NearbyTogetherProtocol.decode(raw);
+    if (message == null) return;
+
+    if (message.type == 'ack') {
+      _acceptAck(message);
+      return;
+    }
+
+    if (NearbyTogetherProtocol.requiresAck(message.type)) {
+      _sendAck(socket, message.id);
+      if (!_rememberReliableId(message.id)) return;
+    }
+
+    if (!_messages.isClosed) _messages.add(message);
+  }
+
+  void _acceptAck(NearbyTogetherMessage message) {
+    final rawId = message.payload['message_id'];
+    if (rawId is! String || rawId.isEmpty) return;
+    final pending = _pending.remove(rawId);
+    if (pending == null) return;
+    pending.retryTimer?.cancel();
+    if (!pending.completer.isCompleted) pending.completer.complete();
+  }
+
+  void _sendAck(WebSocket socket, String messageId) {
+    if (socket.readyState != WebSocket.open) return;
+    try {
+      socket.add(NearbyTogetherProtocol.encode('ack', {'message_id': messageId}));
+    } catch (_) {}
+  }
+
+  bool _rememberReliableId(String id) {
+    if (!_seenReliableIds.add(id)) return false;
+    if (_seenReliableIds.length > _maxSeenReliableIds) {
+      _seenReliableIds.remove(_seenReliableIds.first);
+    }
+    return true;
   }
 
   Future<void> send(String type, Map<String, dynamic> payload) async {
@@ -386,12 +583,76 @@ class NearbyTogetherGuest {
     if (socket == null || socket.readyState != WebSocket.open) {
       throw StateError('Nearby Together is not connected.');
     }
-    socket.add(NearbyTogetherProtocol.encode(type, payload));
+
+    final encoded = NearbyTogetherProtocol.encode(type, payload);
+    if (!NearbyTogetherProtocol.requiresAck(type)) {
+      socket.add(encoded);
+      return;
+    }
+
+    final decoded = NearbyTogetherProtocol.decode(encoded);
+    if (decoded == null) {
+      throw StateError('OTYA could not prepare a Together message.');
+    }
+
+    final pending = _PendingNearbyMessage(encoded);
+    _pending[decoded.id] = pending;
+    socket.add(encoded);
+    _scheduleRetry(socket, decoded.id, pending);
+    return pending.completer.future;
+  }
+
+  void _scheduleRetry(
+    WebSocket socket,
+    String messageId,
+    _PendingNearbyMessage pending,
+  ) {
+    pending.retryTimer?.cancel();
+    pending.retryTimer = Timer(_ackTimeout, () {
+      if (_pending[messageId] != pending || pending.completer.isCompleted) return;
+      if (!identical(_socket, socket) || socket.readyState != WebSocket.open) {
+        _pending.remove(messageId);
+        if (!pending.completer.isCompleted) {
+          pending.completer.completeError(
+            StateError('Nearby Together disconnected before delivery was confirmed.'),
+          );
+        }
+        return;
+      }
+      if (pending.attempts >= _maxDeliveryAttempts) {
+        _pending.remove(messageId);
+        if (!pending.completer.isCompleted) {
+          pending.completer.completeError(
+            TimeoutException('Nearby Together delivery was not acknowledged.'),
+          );
+        }
+        unawaited(_closeForDeliveryFailure(socket));
+        return;
+      }
+
+      pending.attempts += 1;
+      socket.add(pending.encoded);
+      _scheduleRetry(socket, messageId, pending);
+    });
+  }
+
+  Future<void> _closeForDeliveryFailure(WebSocket socket) async {
+    if (socket.readyState == WebSocket.open) {
+      try {
+        await socket.close(
+          WebSocketStatus.goingAway,
+          'Together delivery timed out',
+        );
+      } catch (_) {}
+    }
+    _disconnected(socket);
   }
 
   Future<void> disconnect() async {
     final socket = _socket;
     _socket = null;
+    _failPending('Left Nearby Together.');
+    _seenReliableIds.clear();
     if (socket != null) {
       try {
         socket.add(NearbyTogetherProtocol.encode('bye', const {}));
@@ -409,7 +670,20 @@ class NearbyTogetherGuest {
   void _disconnected(WebSocket socket) {
     if (identical(_socket, socket)) {
       _socket = null;
+      _failPending('Nearby Together host disconnected.');
+      _seenReliableIds.clear();
       if (!_connections.isClosed) _connections.add(false);
+    }
+  }
+
+  void _failPending(String reason) {
+    final pendingMessages = _pending.values.toList(growable: false);
+    _pending.clear();
+    for (final pending in pendingMessages) {
+      pending.retryTimer?.cancel();
+      if (!pending.completer.isCompleted) {
+        pending.completer.completeError(StateError(reason));
+      }
     }
   }
 
