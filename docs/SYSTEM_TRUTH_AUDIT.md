@@ -33,3 +33,9 @@ Google Play builds do not sideload from the direct APK channel; their update del
 ## Publication boundary
 
 Source changes are not production deployment. Release-mode validation proves that a candidate can compile and that required Android runtime components survive release optimization. Public release truth additionally requires the matching server source to be deployed, immutable release metadata to be published, and the exact signed artifact to be inspected.
+
+## Repository hygiene boundary
+
+The Android product no longer carries consumer-AI screens, client service code, or assistant-only logo exports. Admin AI remains a server-side concern. Public split APK publication has a hard 40 MB size ceiling and warns at 35 MB so accidental dependency or asset bloat fails before upload.
+
+A branch is safe to delete only after its unique commits have been compared with `main` and any still-required behavior has been ported and validated. Git tags are release history and are not part of branch cleanup. Dead assets and compatibility files are removed only after reference checks prove they are not runtime, release, migration, or compatibility dependencies.
