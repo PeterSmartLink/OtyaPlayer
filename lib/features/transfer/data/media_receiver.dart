@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -6,7 +7,19 @@ import 'transfer_security_policy.dart';
 
 typedef ProgressCallback = void Function(int bytesDownloaded, int totalBytes);
 
-/// MediaReceiver — restricted local HTTP downloader for Otya Transfer.
+class OtyaTransferBatchItem {
+  const OtyaTransferBatchItem({
+    required this.name,
+    required this.url,
+    required this.sizeBytes,
+  });
+
+  final String name;
+  final String url;
+  final int sizeBytes;
+}
+
+/// MediaReceiver — restricted local HTTP downloader for Otya Send.
 ///
 /// Incoming bytes are streamed directly to disk. The receiver accepts only
 /// authenticated Otya media links on private/local IPv4 ranges, refuses
@@ -14,12 +27,114 @@ typedef ProgressCallback = void Function(int bytesDownloaded, int totalBytes);
 /// when a sidecar proves the partial belongs to the same transfer token.
 class MediaReceiver {
   static const int _maxTransferBytes = 16 * 1024 * 1024 * 1024;
+  static const int _maxManifestBytes = 256 * 1024;
+  static const int _maxBatchItems = 200;
   static const Set<String> _supportedExtensions = {
-    'mp4', 'mkv', 'avi', 'mov', 'webm', 'ts',
-    'mp3', 'aac', 'flac', 'wav', 'ogg', 'm4a', 'opus',
+    'mp4',
+    'mkv',
+    'avi',
+    'mov',
+    'webm',
+    'ts',
+    'mp3',
+    'aac',
+    'flac',
+    'wav',
+    'ogg',
+    'm4a',
+    'opus',
   };
 
   bool _cancelled = false;
+
+  /// Reads and validates the small authenticated batch manifest behind a Send
+  /// QR. Every returned media URL must remain on the exact same local sender,
+  /// port and one-time token as the scanned batch URL.
+  Future<List<OtyaTransferBatchItem>> discoverBatch(String url) async {
+    final uri = Uri.parse(url);
+    if (!isAllowedTransferBatchUri(uri)) {
+      throw const FormatException('That code is not a valid Otya Send batch.');
+    }
+
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 10)
+      ..idleTimeout = const Duration(seconds: 30);
+    try {
+      final request = await client.getUrl(uri);
+      request.followRedirects = false;
+      final response = await request.close();
+      if (_isRedirect(response.statusCode)) {
+        await response.drain<void>();
+        throw HttpException('Otya Send does not follow redirects.', uri: uri);
+      }
+      if (response.statusCode != HttpStatus.ok ||
+          response.headers.value('X-Otya-Transfer') != '1' ||
+          response.headers.value('X-Otya-Transfer-Mode') != 'batch') {
+        await response.drain<void>();
+        throw HttpException('The nearby endpoint is not an Otya batch sender.', uri: uri);
+      }
+
+      final contentType = response.headers.contentType?.mimeType.toLowerCase();
+      if (contentType != 'application/json') {
+        await response.drain<void>();
+        throw HttpException('Otya batch metadata has an invalid content type.', uri: uri);
+      }
+      if (response.contentLength > _maxManifestBytes) {
+        await response.drain<void>();
+        throw HttpException('Otya batch metadata is too large.', uri: uri);
+      }
+
+      final bytes = <int>[];
+      await for (final chunk in response) {
+        bytes.addAll(chunk);
+        if (bytes.length > _maxManifestBytes) {
+          throw HttpException('Otya batch metadata is too large.', uri: uri);
+        }
+      }
+
+      final decoded = jsonDecode(utf8.decode(bytes));
+      if (decoded is! Map<String, dynamic> || decoded['version'] != 1) {
+        throw const FormatException('Unsupported Otya Send batch format.');
+      }
+      final rawFiles = decoded['files'];
+      if (rawFiles is! List || rawFiles.isEmpty || rawFiles.length > _maxBatchItems) {
+        throw const FormatException('Otya Send batch has an invalid item count.');
+      }
+
+      final token = uri.queryParameters['t'];
+      final items = <OtyaTransferBatchItem>[];
+      for (final raw in rawFiles) {
+        if (raw is! Map) {
+          throw const FormatException('Otya Send batch contains invalid media metadata.');
+        }
+        final name = _safeMediaName(raw['name']);
+        final size = raw['bytes'];
+        final rawUrl = raw['url'];
+        if (size is! int || size <= 0 || size > _maxTransferBytes || rawUrl is! String) {
+          throw const FormatException('Otya Send batch contains invalid media metadata.');
+        }
+
+        final itemUri = Uri.tryParse(rawUrl);
+        if (itemUri == null ||
+            !isAllowedTransferUri(itemUri) ||
+            itemUri.path == '/together-stream' ||
+            itemUri.host != uri.host ||
+            itemUri.port != uri.port ||
+            itemUri.queryParameters['t'] != token) {
+          throw const FormatException('Otya Send batch tried to leave the verified local sender.');
+        }
+
+        items.add(OtyaTransferBatchItem(
+          name: name,
+          url: itemUri.toString(),
+          sizeBytes: size,
+        ));
+      }
+      return List<OtyaTransferBatchItem>.unmodifiable(items);
+    } finally {
+      client.close(force: true);
+    }
+  }
 
   Future<File> download({
     required String url,
@@ -28,14 +143,14 @@ class MediaReceiver {
   }) async {
     _cancelled = false;
     final uri = Uri.parse(url);
-    if (!isAllowedTransferUri(uri)) {
+    if (!isAllowedTransferUri(uri) || uri.path == '/together-stream') {
       throw const FormatException(
-        'Otya Transfer only accepts authenticated private local-network links.',
+        'Otya Send only accepts authenticated private local-network media links.',
       );
     }
     if (!_supportedExtensions.contains(_extension(savePath))) {
       throw const FormatException(
-        'Otya Transfer only receives supported media files.',
+        'Otya Send only receives supported music and video files.',
       );
     }
 
@@ -74,12 +189,12 @@ class MediaReceiver {
       final response = await request.close();
       if (_isRedirect(response.statusCode)) {
         await response.drain<void>();
-        throw HttpException('Otya Transfer does not follow redirects.', uri: uri);
+        throw HttpException('Otya Send does not follow redirects.', uri: uri);
       }
       if (response.headers.value('X-Otya-Transfer') != '1') {
         await response.drain<void>();
         throw HttpException(
-          'The nearby endpoint is not an Otya Transfer sender.',
+          'The nearby endpoint is not an Otya Send sender.',
           uri: uri,
         );
       }
@@ -120,7 +235,7 @@ class MediaReceiver {
           !contentType.startsWith('video/')) {
         await response.drain<void>();
         throw HttpException(
-          'Otya Transfer rejected a non-media response.',
+          'Otya Send rejected a non-media response.',
           uri: uri,
         );
       }
@@ -133,7 +248,7 @@ class MediaReceiver {
       if (responseBytes < 0) {
         await response.drain<void>();
         throw HttpException(
-          'Otya Transfer requires a known file size.',
+          'Otya Send requires a known file size.',
           uri: uri,
         );
       }
@@ -160,7 +275,7 @@ class MediaReceiver {
         downloaded += chunk.length;
         if (downloaded > _maxTransferBytes || downloaded > totalBytes) {
           throw HttpException(
-            'Otya Transfer exceeded the declared safe size.',
+            'Otya Send exceeded the declared safe size.',
             uri: uri,
           );
         }
@@ -189,6 +304,24 @@ class MediaReceiver {
     } finally {
       client.close(force: true);
     }
+  }
+
+  String _safeMediaName(Object? raw) {
+    if (raw is! String) {
+      throw const FormatException('Otya Send item has no valid file name.');
+    }
+    final name = raw
+        .replaceAll('\\', '/')
+        .split('/')
+        .last
+        .replaceAll(RegExp(r'[\x00-\x1F\x7F]'), '')
+        .trim();
+    if (name.isEmpty ||
+        name.length > 240 ||
+        !_supportedExtensions.contains(_extension(name))) {
+      throw const FormatException('Otya Send item has an unsupported file name.');
+    }
+    return name;
   }
 
   bool _isRedirect(int statusCode) =>
