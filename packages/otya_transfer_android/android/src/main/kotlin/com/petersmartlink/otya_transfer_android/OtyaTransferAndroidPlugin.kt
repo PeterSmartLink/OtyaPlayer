@@ -7,6 +7,7 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.StatFs
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -16,8 +17,9 @@ import java.io.File
  * Narrow Android bridge for Otya Send.
  *
  * This plugin owns only the Android APIs Dart cannot provide reliably:
- * LocalOnlyHotspot lifecycle and inspection of the installed APK layout.
- * File transport, tokens, QR payloads and receive policy remain owned by Dart.
+ * LocalOnlyHotspot lifecycle, filesystem capacity and inspection of the
+ * installed APK layout. File transport, tokens, QR payloads and receive policy
+ * remain owned by Dart.
  */
 class OtyaTransferAndroidPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     private lateinit var context: Context
@@ -52,9 +54,35 @@ class OtyaTransferAndroidPlugin : FlutterPlugin, MethodChannel.MethodCallHandler
                 stopHotspot()
                 result.success(null)
             }
+            "availableBytes" -> availableBytes(call, result)
             "getShareableApk" -> result.success(getShareableApk())
             "sdkInt" -> result.success(Build.VERSION.SDK_INT)
             else -> result.notImplemented()
+        }
+    }
+
+    private fun availableBytes(call: MethodCall, result: MethodChannel.Result) {
+        val rawPath = call.argument<String>("path")?.trim().orEmpty()
+        if (rawPath.isEmpty()) {
+            result.error("STORAGE_PATH_REQUIRED", "Otya needs a destination path to check storage.", null)
+            return
+        }
+
+        try {
+            var target = File(rawPath)
+            while (!target.exists() && target.parentFile != null) {
+                target = target.parentFile!!
+            }
+            if (!target.exists()) {
+                result.success(null)
+                return
+            }
+            result.success(StatFs(target.absolutePath).availableBytes)
+        } catch (_: Throwable) {
+            // Capacity preflight is an optimization/safety signal. Dart still
+            // enforces declared size and streaming limits if Android cannot
+            // report filesystem capacity for an unusual storage provider.
+            result.success(null)
         }
     }
 
