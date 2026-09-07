@@ -95,7 +95,7 @@ jobs:
           swap-storage: true
 
       - name: Checkout release source
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && 'refs/heads/main' || github.ref }}
@@ -135,7 +135,7 @@ jobs:
           }
 
       - name: Set up Java 17
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
@@ -285,7 +285,7 @@ jobs:
           echo "checksums=$OUT/checksums.txt" >> "$GITHUB_OUTPUT"
 
       - name: Save exact release evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Otya-${{ steps.release.outputs.tag }}
           if-no-files-found: error
@@ -310,7 +310,7 @@ jobs:
         run: bash scripts/publish_r2.sh
 
       - name: Create GitHub release from the same verified files
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.release.outputs.tag }}
           name: Otya ${{ steps.release.outputs.tag }}
