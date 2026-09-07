@@ -135,7 +135,8 @@ class UpdateService {
       final serverVersion = (data['version'] as String? ?? '').trim();
       final tag = (data['tag'] as String? ?? '').trim();
       final tagMatch = _releaseTag.firstMatch(tag);
-      final tagBuild = tagMatch == null ? 0 : int.tryParse(tagMatch.group(2) ?? '') ?? 0;
+      final tagBuild =
+          tagMatch == null ? 0 : int.tryParse(tagMatch.group(2) ?? '') ?? 0;
 
       if (serverVersionCode <= 0 ||
           serverVersion.isEmpty ||
@@ -154,23 +155,33 @@ class UpdateService {
       final abi = _detectAbi();
       if (abi != 'arm64' && abi != 'arm32') {
         _lastState = UpdateCheckState.unavailable;
-        _lastError = 'This Android CPU architecture is not supported by the direct update channel.';
+        _lastError =
+            'This Android CPU architecture is not supported by the direct update channel.';
         return null;
       }
 
+      // Self-update must bind the installed APK to the exact immutable release
+      // identity returned by /latest. Mutable "latest" aliases are useful for
+      // browsers but are not accepted as the binary authority inside the app.
       final exactKey = abi == 'arm64' ? 'exactArm64' : 'exactArm32';
-      final aliasKey = abi == 'arm64' ? 'arm64' : 'arm32';
-      final rawDirect = downloads[exactKey] ?? downloads[aliasKey];
-      final directUrl = _officialHttps(rawDirect);
+      final directUrl = _officialExactApk(
+        downloads[exactKey],
+        abi: abi,
+        tag: tag,
+      );
       final pageUrl = _officialHttps(downloads['auto']) ??
           _officialHttps(Environment.downloadPageUrl);
       if (directUrl == null || pageUrl == null) {
         _lastState = UpdateCheckState.unavailable;
-        _lastError = 'Published release does not contain a verified Otya download destination.';
+        _lastError =
+            'Published release does not contain a verified immutable Otya download destination.';
         return null;
       }
 
-      await prefs.setInt(_prefLastCheck, DateTime.now().millisecondsSinceEpoch);
+      await prefs.setInt(
+        _prefLastCheck,
+        DateTime.now().millisecondsSinceEpoch,
+      );
       debugPrint(
         '[UpdateService] Installed: $installedCode  Published: $serverVersionCode ($tag)',
       );
@@ -211,6 +222,26 @@ class UpdateService {
     return uri.toString();
   }
 
+  String? _officialExactApk(
+    Object? raw, {
+    required String abi,
+    required String tag,
+  }) {
+    final safe = _officialHttps(raw);
+    if (safe == null) return null;
+    final uri = Uri.parse(safe);
+    final tagValues = uri.queryParametersAll['tag'];
+    if (uri.path != '/apk/$abi' ||
+        uri.fragment.isNotEmpty ||
+        uri.queryParametersAll.length != 1 ||
+        tagValues == null ||
+        tagValues.length != 1 ||
+        tagValues.single != tag) {
+      return null;
+    }
+    return uri.toString();
+  }
+
   Future<void> checkAndNotify() async {
     final info = await checkForUpdate();
     if (info == null) return;
@@ -223,7 +254,10 @@ class UpdateService {
 
   Future<void> remindLater(int versionCode) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_prefLastCheck, DateTime.now().millisecondsSinceEpoch);
+    await prefs.setInt(
+      _prefLastCheck,
+      DateTime.now().millisecondsSinceEpoch,
+    );
     debugPrint('[UpdateService] Remind later for build $versionCode.');
   }
 
