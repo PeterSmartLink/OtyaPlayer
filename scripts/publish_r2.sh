@@ -51,10 +51,19 @@ WORKER_URL="${WORKER_URL%/}"
 
 ARM64_APK="${ARM64_APK:-build/app/outputs/flutter-apk/app-arm64-v8a-release.apk}"
 ARM32_APK="${ARM32_APK:-build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk}"
+MAX_APK_BYTES=40000000
+WARN_APK_BYTES=35000000
 for APK in "$ARM64_APK" "$ARM32_APK"; do
   test -f "$APK" || { echo "ERROR: APK not found: $APK"; exit 1; }
   SIZE=$(stat -c%s "$APK" 2>/dev/null || stat -f%z "$APK")
   [ "$SIZE" -ge 5000000 ] || { echo "ERROR: $APK looks too small ($SIZE bytes)"; exit 1; }
+  [ "$SIZE" -le "$MAX_APK_BYTES" ] || {
+    echo "ERROR: $APK is $SIZE bytes; Otya split APKs must stay at or below $MAX_APK_BYTES bytes"
+    exit 1
+  }
+  if [ "$SIZE" -gt "$WARN_APK_BYTES" ]; then
+    echo "WARNING: $APK is $SIZE bytes and has crossed Otya's $WARN_APK_BYTES-byte size warning line"
+  fi
 done
 
 CHANGELOG_FILE=$(mktemp)
