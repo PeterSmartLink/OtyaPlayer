@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:typed_data';
 
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
@@ -22,12 +23,12 @@ enum AnywhereTogetherPeerState {
 /// One private WebRTC peer connection for Anywhere Together.
 ///
 /// The OTYA server is used only for room membership, short-lived ICE config,
-/// and offer/answer/ICE setup messages. Once the data channel opens, playback
-/// state, temporary chat, reactions, Moments and media metadata bypass OTYA's
-/// backend entirely.
+/// and offer/answer/ICE setup messages. Once connected, normal Together events
+/// use one ordered control data channel while movie byte ranges use a second
+/// ordered binary channel. Neither payload is stored by OTYA's backend.
 ///
 /// This transport never captures microphone/camera tracks. OTYA uses WebRTC's
-/// encrypted data channel only; normal local playback remains independent.
+/// encrypted data channels only; normal local playback remains independent.
 class AnywhereTogetherPeer {
   AnywhereTogetherPeer({
     required this.roomId,
@@ -39,8 +40,10 @@ class AnywhereTogetherPeer {
   })  : controlClient = controlClient ?? TogetherControlClient.instance,
         iceConfigClient = iceConfigClient ?? TogetherIceConfigClient.instance;
 
-  static const String channelLabel = 'otya-together-v1';
+  static const String controlChannelLabel = 'otya-together-v1';
+  static const String mediaChannelLabel = 'otya-together-media-v1';
   static const int _maxSeenPacketIds = 256;
+  static const int _mediaHighWaterBytes = 2 * 1024 * 1024;
 
   final String roomId;
   final AnywhereTogetherRole role;
@@ -54,11 +57,14 @@ class AnywhereTogetherPeer {
   final StreamController<AnywhereTogetherPeerState> _states =
       StreamController<AnywhereTogetherPeerState>.broadcast();
   final StreamController<String> _errors = StreamController<String>.broadcast();
+  final StreamController<RTCDataChannelMessage> _mediaMessages =
+      StreamController<RTCDataChannelMessage>.broadcast();
   final LinkedHashSet<String> _seenPacketIds = LinkedHashSet<String>();
   final List<RTCIceCandidate> _queuedRemoteCandidates = [];
 
   RTCPeerConnection? _peerConnection;
-  RTCDataChannel? _dataChannel;
+  RTCDataChannel? _controlDataChannel;
+  RTCDataChannel? _mediaDataChannel;
   Timer? _pollTimer;
   Timer? _disconnectTimer;
   AnywhereTogetherPeerState _state = AnywhereTogetherPeerState.idle;
@@ -71,8 +77,11 @@ class AnywhereTogetherPeer {
   Stream<AnywhereTogetherPacket> get packets => _packets.stream;
   Stream<AnywhereTogetherPeerState> get states => _states.stream;
   Stream<String> get errors => _errors.stream;
+  Stream<RTCDataChannelMessage> get mediaMessages => _mediaMessages.stream;
   AnywhereTogetherPeerState get state => _state;
   bool get isConnected => _state == AnywhereTogetherPeerState.connected;
+  bool get mediaReady =>
+      _mediaDataChannel?.state == RTCDataChannelState.RTCDataChannelOpen;
 
   Future<void> connect() async {
     if (_state != AnywhereTogetherPeerState.idle) {
@@ -105,11 +114,23 @@ class AnywhereTogetherPeer {
       _startPolling();
 
       if (role == AnywhereTogetherRole.host) {
-        final init = RTCDataChannelInit()
+        final controlInit = RTCDataChannelInit()
           ..ordered = true
-          ..protocol = channelLabel;
-        final channel = await peer.createDataChannel(channelLabel, init);
-        _attachDataChannel(channel);
+          ..protocol = controlChannelLabel;
+        final controlChannel = await peer.createDataChannel(
+          controlChannelLabel,
+          controlInit,
+        );
+        _attachControlDataChannel(controlChannel);
+
+        final mediaInit = RTCDataChannelInit()
+          ..ordered = true
+          ..protocol = mediaChannelLabel;
+        final mediaChannel = await peer.createDataChannel(
+          mediaChannelLabel,
+          mediaInit,
+        );
+        _attachMediaDataChannel(mediaChannel);
         await _sendFreshOffer(peer);
       } else {
         await _pollSignals();
@@ -126,7 +147,7 @@ class AnywhereTogetherPeer {
     String type, {
     Map<String, dynamic> payload = const {},
   }) async {
-    final channel = _dataChannel;
+    final channel = _controlDataChannel;
     if (channel == null ||
         channel.state != RTCDataChannelState.RTCDataChannelOpen) {
       throw StateError('Anywhere Together is not connected.');
@@ -138,6 +159,37 @@ class AnywhereTogetherPeer {
       payload: payload,
     );
     await channel.send(RTCDataChannelMessage(encoded));
+  }
+
+  Future<void> sendMediaText(String value) async {
+    await _sendMediaMessage(RTCDataChannelMessage(value));
+  }
+
+  Future<void> sendMediaBinary(Uint8List value) async {
+    await _sendMediaMessage(RTCDataChannelMessage.fromBinary(value));
+  }
+
+  Future<void> _sendMediaMessage(RTCDataChannelMessage message) async {
+    final channel = _mediaDataChannel;
+    if (channel == null ||
+        channel.state != RTCDataChannelState.RTCDataChannelOpen) {
+      throw StateError('Anywhere Together media path is not connected.');
+    }
+    await _waitForMediaBuffer(channel);
+    await channel.send(message);
+  }
+
+  Future<void> _waitForMediaBuffer(RTCDataChannel channel) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    while ((channel.bufferedAmount ?? 0) > _mediaHighWaterBytes) {
+      if (channel.state != RTCDataChannelState.RTCDataChannelOpen) {
+        throw StateError('Anywhere Together media path closed.');
+      }
+      if (DateTime.now().isAfter(deadline)) {
+        throw TimeoutException('Anywhere Together media path is congested.');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 12));
+    }
   }
 
   Future<void> close({
@@ -171,6 +223,7 @@ class AnywhereTogetherPeer {
     if (!_packets.isClosed) await _packets.close();
     if (!_states.isClosed) await _states.close();
     if (!_errors.isClosed) await _errors.close();
+    if (!_mediaMessages.isClosed) await _mediaMessages.close();
   }
 
   Future<void> _waitForGuest() async {
@@ -193,9 +246,11 @@ class AnywhereTogetherPeer {
       unawaited(_sendIceCandidate(candidate));
     };
     peer.onDataChannel = (channel) {
-      if (role == AnywhereTogetherRole.guest &&
-          channel.label == channelLabel) {
-        _attachDataChannel(channel);
+      if (role != AnywhereTogetherRole.guest) return;
+      if (channel.label == controlChannelLabel) {
+        _attachControlDataChannel(channel);
+      } else if (channel.label == mediaChannelLabel) {
+        _attachMediaDataChannel(channel);
       }
     };
     peer.onConnectionState = _handleConnectionState;
@@ -208,8 +263,8 @@ class AnywhereTogetherPeer {
     };
   }
 
-  void _attachDataChannel(RTCDataChannel channel) {
-    _dataChannel = channel;
+  void _attachControlDataChannel(RTCDataChannel channel) {
+    _controlDataChannel = channel;
     channel.onMessage = (message) {
       if (message.isBinary) return;
       _acceptPacket(message.text);
@@ -223,6 +278,18 @@ class AnywhereTogetherPeer {
           !_closing) {
         _setState(AnywhereTogetherPeerState.reconnecting);
         _startPolling();
+      }
+    };
+  }
+
+  void _attachMediaDataChannel(RTCDataChannel channel) {
+    _mediaDataChannel = channel;
+    channel.onMessage = (message) {
+      if (!_mediaMessages.isClosed) _mediaMessages.add(message);
+    };
+    channel.onDataChannelState = (state) {
+      if (state == RTCDataChannelState.RTCDataChannelClosed && !_closing) {
+        _emitError('Anywhere Together media path closed.');
       }
     };
   }
@@ -246,7 +313,8 @@ class AnywhereTogetherPeer {
     switch (state) {
       case RTCPeerConnectionState.RTCPeerConnectionStateConnected:
         _disconnectTimer?.cancel();
-        if (_dataChannel?.state == RTCDataChannelState.RTCDataChannelOpen) {
+        if (_controlDataChannel?.state ==
+            RTCDataChannelState.RTCDataChannelOpen) {
           _setState(AnywhereTogetherPeerState.connected);
           _stopPolling();
         }
@@ -454,10 +522,16 @@ class AnywhereTogetherPeer {
     _queuedRemoteCandidates.clear();
     _hasRemoteDescription = false;
 
-    final channel = _dataChannel;
-    _dataChannel = null;
+    final controlChannel = _controlDataChannel;
+    _controlDataChannel = null;
     try {
-      await channel?.close();
+      await controlChannel?.close();
+    } catch (_) {}
+
+    final mediaChannel = _mediaDataChannel;
+    _mediaDataChannel = null;
+    try {
+      await mediaChannel?.close();
     } catch (_) {}
 
     final peer = _peerConnection;
