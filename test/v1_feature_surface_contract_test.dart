@@ -101,11 +101,18 @@ void main() {
     ).readAsStringSync();
 
     expect(receiver, contains('isAllowedTransferUri(uri)'));
-    expect(policy, contains("uri.path != '/media'"));
+    expect(policy, contains("uri.scheme == 'http'"));
+    expect(
+      policy,
+      contains("uri.path == '/media' || _indexedMediaPathPattern.hasMatch(uri.path)"),
+    );
+    expect(policy, contains("uri.path != '/batch'"));
     expect(policy, contains("RegExp(r'^[a-f0-9]{64}\$')"));
     expect(receiver, contains('FileMode.append'));
     expect(receiver, contains('.otya-transfer'));
     expect(receiver, contains('TransferCancelledException'));
+    expect(screen, contains('_sender.startServingBatch('));
+    expect(screen, contains('_receiver.discoverBatch(rawUrl)'));
     expect(screen, contains("split('/').last"));
   });
 
