@@ -67,10 +67,11 @@ ACTUAL_DEBUGGABLE="$(tr -d '\r\n[:space:]' < "$EVIDENCE_DIR/debuggable.txt" | tr
 [ "$ACTUAL_DEBUGGABLE" = 'false' ] || fail "release APK is debuggable"
 
 # MediaSession + foreground-service contract. Android SDK tool revisions can
-# render foregroundServiceType as either the symbolic enum or integer value.
+# render foregroundServiceType as the symbolic enum, a decimal integer, or a
+# zero-padded hexadecimal typed value (2 == mediaPlayback).
 require_literal "$EVIDENCE_DIR/manifest.xml" 'com.ryanheise.audioservice.AudioService' 'audio_service foreground service'
 require_literal "$EVIDENCE_DIR/manifest.xml" 'com.ryanheise.audioservice.MediaButtonReceiver' 'media button receiver'
-require_regex "$EVIDENCE_DIR/manifest.xml" 'android:foregroundServiceType="(mediaPlayback|2)"' 'mediaPlayback foreground service type'
+require_regex "$EVIDENCE_DIR/manifest.xml" 'android:foregroundServiceType="(mediaPlayback|2|0x0*2)"' 'mediaPlayback foreground service type'
 require_literal "$EVIDENCE_DIR/manifest.xml" 'com.ryanheise.audioservice.NOTIFICATION_CHANNEL_ID' 'Now Playing notification channel metadata'
 require_literal "$EVIDENCE_DIR/manifest.xml" 'com.otyaplayer.app.audio' 'Otya Now Playing channel id'
 
