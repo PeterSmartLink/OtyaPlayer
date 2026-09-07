@@ -148,12 +148,21 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Install dependencies and publisher tools
+      - name: Install locked dependencies and publisher tools
         shell: bash
         run: |
           set -euo pipefail
           pip install awscli --quiet
+          test -s pubspec.lock || { echo 'ERROR: committed pubspec.lock is missing'; exit 1; }
+          BEFORE="$(sha256sum pubspec.lock | awk '{print $1}')"
           flutter pub get
+          AFTER="$(sha256sum pubspec.lock | awk '{print $1}')"
+          test "$BEFORE" = "$AFTER" || {
+            git diff -- pubspec.lock
+            echo 'ERROR: flutter pub get changed the committed dependency graph'
+            exit 1
+          }
+          git diff --exit-code -- pubspec.lock
 
       - name: Generate code
         run: dart run build_runner build --delete-conflicting-outputs
