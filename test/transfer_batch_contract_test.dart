@@ -31,6 +31,19 @@ void main() {
     expect(policy, contains(r"RegExp(r'^/media/[0-9]+$')"));
   });
 
+  test('received batches are bounded as a whole and cannot repeat one URL', () {
+    final receiver = File(
+      'lib/features/transfer/data/media_receiver.dart',
+    ).readAsStringSync();
+
+    expect(receiver, contains('_maxBatchItems = 200'));
+    expect(receiver, contains('_maxBatchBytes = 64 * 1024 * 1024 * 1024'));
+    expect(receiver, contains('final seenUrls = <String>{}'));
+    expect(receiver, contains('if (!seenUrls.add(normalizedUrl))'));
+    expect(receiver, contains('totalBatchBytes += size'));
+    expect(receiver, contains('if (totalBatchBytes > _maxBatchBytes)'));
+  });
+
   test('Send selection is multi-item and survives Videos Music switching', () {
     final screen = File(
       'lib/features/transfer/presentation/transfer_screen.dart',
