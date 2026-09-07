@@ -92,10 +92,14 @@ class AnywhereTogetherPeer {
       final iceResult = await iceConfigClient.fetchForRoom(roomId);
       final ice = iceResult.value;
       if (!iceResult.ok || ice == null) {
-        throw StateError(iceResult.error ?? 'Could not prepare Together connection.');
+        throw StateError(
+          iceResult.error ?? 'Could not prepare Together connection.',
+        );
       }
 
-      final peer = await createPeerConnection(ice.peerConnectionConfiguration);
+      final peer = await createPeerConnection(
+        ice.peerConnectionConfiguration,
+      );
       _peerConnection = peer;
       _wirePeerCallbacks(peer);
       _startPolling();
@@ -123,7 +127,8 @@ class AnywhereTogetherPeer {
     Map<String, dynamic> payload = const {},
   }) async {
     final channel = _dataChannel;
-    if (channel == null || channel.state != RTCDataChannelState.RTCDataChannelOpen) {
+    if (channel == null ||
+        channel.state != RTCDataChannelState.RTCDataChannelOpen) {
       throw StateError('Anywhere Together is not connected.');
     }
 
@@ -178,7 +183,9 @@ class AnywhereTogetherPeer {
       }
       await Future<void>.delayed(const Duration(seconds: 1));
     }
-    throw TimeoutException('The invited person did not join Together in time.');
+    throw TimeoutException(
+      'The invited person did not join Together in time.',
+    );
   }
 
   void _wirePeerCallbacks(RTCPeerConnection peer) {
@@ -186,14 +193,17 @@ class AnywhereTogetherPeer {
       unawaited(_sendIceCandidate(candidate));
     };
     peer.onDataChannel = (channel) {
-      if (role == AnywhereTogetherRole.guest && channel.label == channelLabel) {
+      if (role == AnywhereTogetherRole.guest &&
+          channel.label == channelLabel) {
         _attachDataChannel(channel);
       }
     };
     peer.onConnectionState = _handleConnectionState;
     peer.onIceConnectionState = (state) {
       if (state == RTCIceConnectionState.RTCIceConnectionStateFailed) {
-        _emitError('Anywhere Together could not find a working network path.');
+        _emitError(
+          'Anywhere Together could not find a working network path.',
+        );
       }
     };
   }
@@ -209,7 +219,8 @@ class AnywhereTogetherPeer {
         _disconnectTimer?.cancel();
         _setState(AnywhereTogetherPeerState.connected);
         _stopPolling();
-      } else if (state == RTCDataChannelState.RTCDataChannelClosed && !_closing) {
+      } else if (state == RTCDataChannelState.RTCDataChannelClosed &&
+          !_closing) {
         _setState(AnywhereTogetherPeerState.reconnecting);
         _startPolling();
       }
@@ -239,6 +250,7 @@ class AnywhereTogetherPeer {
           _setState(AnywhereTogetherPeerState.connected);
           _stopPolling();
         }
+        return;
       case RTCPeerConnectionState.RTCPeerConnectionStateDisconnected:
         if (_closing) return;
         _setState(AnywhereTogetherPeerState.reconnecting);
@@ -247,17 +259,21 @@ class AnywhereTogetherPeer {
         _disconnectTimer = Timer(const Duration(seconds: 3), () {
           unawaited(_attemptRecovery());
         });
+        return;
       case RTCPeerConnectionState.RTCPeerConnectionStateFailed:
         if (_closing) return;
         _setState(AnywhereTogetherPeerState.failed);
         _emitError('Anywhere Together connection failed.');
+        return;
       case RTCPeerConnectionState.RTCPeerConnectionStateClosed:
         if (!_closing) _setState(AnywhereTogetherPeerState.closed);
+        return;
       case RTCPeerConnectionState.RTCPeerConnectionStateNew:
       case RTCPeerConnectionState.RTCPeerConnectionStateConnecting:
         if (_state != AnywhereTogetherPeerState.reconnecting) {
           _setState(AnywhereTogetherPeerState.connecting);
         }
+        return;
     }
   }
 
@@ -308,7 +324,9 @@ class AnywhereTogetherPeer {
       },
     );
     if (!result.ok && result.code != 'GUEST_NOT_JOINED') {
-      _emitError(result.error ?? 'Could not send Together network candidate.');
+      _emitError(
+        result.error ?? 'Could not send Together network candidate.',
+      );
     }
   }
 
@@ -383,8 +401,11 @@ class AnywhereTogetherPeer {
           },
         );
         if (!result.ok) {
-          throw StateError(result.error ?? 'Could not answer Together connection.');
+          throw StateError(
+            result.error ?? 'Could not answer Together connection.',
+          );
         }
+        return;
       case 'answer':
         if (role != AnywhereTogetherRole.host) return;
         final payload = _signalPayload(signal.payload);
@@ -393,6 +414,7 @@ class AnywhereTogetherPeer {
         await peer.setRemoteDescription(RTCSessionDescription(sdp, 'answer'));
         _hasRemoteDescription = true;
         await _flushRemoteCandidates(peer);
+        return;
       case 'ice':
         final payload = _signalPayload(signal.payload);
         final raw = payload?['candidate'];
@@ -409,8 +431,10 @@ class AnywhereTogetherPeer {
         } else {
           _queuedRemoteCandidates.add(candidate);
         }
+        return;
       case 'bye':
         await close(notifyPeer: false, closeRoom: false);
+        return;
     }
   }
 
@@ -468,7 +492,9 @@ class AnywhereTogetherPeer {
   }
 
   static String _friendlyError(Object error) {
-    if (error is TimeoutException) return error.message ?? 'Together timed out.';
+    if (error is TimeoutException) {
+      return error.message ?? 'Together timed out.';
+    }
     if (error is StateError) return error.message;
     return 'Anywhere Together could not connect right now.';
   }
