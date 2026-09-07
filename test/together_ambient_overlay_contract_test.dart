@@ -18,7 +18,8 @@ void main() {
 
     expect(overlay, contains('const Duration(seconds: 8)'));
     expect(overlay, contains('const Duration(seconds: 4)'));
-    expect(overlay, contains('visibleMessages.length <= 3'));
+    expect(overlay, contains('recentMessages.length <= 3'));
+    expect(overlay, contains('recentMessages.sublist(recentMessages.length - 3)'));
     expect(overlay, contains('message.kind != TogetherMessageKind.reaction'));
     expect(overlay, contains('AppColors.background.withValues(alpha: .42)'));
     expect(overlay, contains("return 'You'"));
