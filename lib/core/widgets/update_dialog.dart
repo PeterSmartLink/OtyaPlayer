@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../shared/widgets/otya_logo.dart';
-import '../config/environment.dart';
 import '../services/update_service.dart';
 
 /// Single-purpose Otya update dialog.
