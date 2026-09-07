@@ -37,6 +37,11 @@ dependencies:
   otya_transfer_android:
     path: packages/otya_transfer_android
 
+  # Remote/Anywhere Together transport candidate. This exact version is pinned
+  # only on the isolated size-budget spike until Otya proves native libwebrtc
+  # stays within the Android release budget and passes the release gates.
+  flutter_webrtc: 1.6.1
+
   # Local Database
   hive: ^2.2.3
   hive_flutter: ^1.1.0
