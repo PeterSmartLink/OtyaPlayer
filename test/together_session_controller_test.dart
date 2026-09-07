@@ -160,7 +160,7 @@ void main() {
   test('long rooms retain only the newest bounded ephemeral transcript', () {
     final now = DateTime.utc(2026, 9, 5, 12);
     final controller = TogetherSessionController()..start(_session(now));
-    final total = TogetherPolicy.maxConversationMessagesV1 + 25;
+    const total = TogetherPolicy.maxConversationMessagesV1 + 25;
 
     for (var i = 0; i < total; i++) {
       controller.receiveMessage(
