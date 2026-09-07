@@ -115,7 +115,7 @@ void main() {
       expect(env, isNot(contains('JAMENDO')));
     });
 
-    test('updater selects an ABI-specific immutable APK target', () {
+    test('updater selects only an ABI-specific immutable APK target', () {
       final updateService =
           File('lib/core/services/update_service.dart').readAsStringSync();
 
@@ -124,14 +124,12 @@ void main() {
         updateService,
         contains("final exactKey = abi == 'arm64' ? 'exactArm64' : 'exactArm32'"),
       );
-      expect(
-        updateService,
-        contains("final aliasKey = abi == 'arm64' ? 'arm64' : 'arm32'"),
-      );
-      expect(
-        updateService,
-        contains('final rawDirect = downloads[exactKey] ?? downloads[aliasKey];'),
-      );
+      expect(updateService, contains('downloads[exactKey]'));
+      expect(updateService, contains('_officialExactApk('));
+      expect(updateService, contains("uri.path != '/apk/\$abi'"));
+      expect(updateService, contains('tagValues.single != tag'));
+      expect(updateService, isNot(contains('final aliasKey =')));
+      expect(updateService, isNot(contains('downloads[exactKey] ??')));
       expect(updateService, contains('directUrl: directUrl'));
       expect(updateService, contains('downloadUrl: pageUrl'));
       expect(
