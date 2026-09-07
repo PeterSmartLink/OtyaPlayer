@@ -89,9 +89,12 @@ Future<void> showNearbyTogetherLiveRoomSurface({
         final keyboardOpen = media.viewInsets.bottom > 0;
         final baseFactor = media.size.height < 680 ? .56 : .48;
         final factor = keyboardOpen ? .72 : baseFactor;
-        final panelHeight = (availableHeight * factor)
-            .clamp(300.0, availableHeight * .82)
-            .toDouble();
+        final maxPanel = availableHeight * .82;
+        final panelHeight = _boundedExtent(
+          desired: availableHeight * factor,
+          maximum: maxPanel,
+          preferredMinimum: 300,
+        );
 
         return AnimatedPadding(
           duration: const Duration(milliseconds: 180),
@@ -130,8 +133,11 @@ Future<void> showNearbyTogetherLiveRoomSurface({
             media.size.height - media.padding.vertical - media.viewInsets.bottom;
         final width = (media.size.width * .36).clamp(300.0, 390.0).toDouble();
         final heightFactor = keyboardOpen ? .90 : .78;
-        final height =
-            (availableHeight * heightFactor).clamp(250.0, availableHeight).toDouble();
+        final height = _boundedExtent(
+          desired: availableHeight * heightFactor,
+          maximum: availableHeight,
+          preferredMinimum: 250,
+        );
 
         return SafeArea(
           child: AnimatedPadding(
@@ -174,6 +180,17 @@ Future<void> showNearbyTogetherLiveRoomSurface({
   runtime.markConversationRead();
 }
 
+double _boundedExtent({
+  required double desired,
+  required double maximum,
+  required double preferredMinimum,
+}) {
+  final safeMaximum = maximum > 1 ? maximum : 1.0;
+  final safeMinimum =
+      preferredMinimum < safeMaximum ? preferredMinimum : safeMaximum;
+  return desired.clamp(safeMinimum, safeMaximum).toDouble();
+}
+
 class _TogetherGlassPanel extends StatelessWidget {
   final BorderRadius borderRadius;
   final Widget child;
@@ -185,6 +202,14 @@ class _TogetherGlassPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final baseTheme = Theme.of(context);
+    final glassScheme = baseTheme.colorScheme.copyWith(
+      surfaceContainerHighest:
+          AppColors.surfaceElevated.withValues(alpha: .48),
+      surfaceContainerHigh: AppColors.surfaceElevated.withValues(alpha: .42),
+      surfaceContainer: AppColors.surface.withValues(alpha: .38),
+    );
+
     return ClipRRect(
       borderRadius: borderRadius,
       child: BackdropFilter(
@@ -212,7 +237,15 @@ class _TogetherGlassPanel extends StatelessWidget {
               ),
             ],
           ),
-          child: child,
+          child: Theme(
+            data: baseTheme.copyWith(
+              colorScheme: glassScheme,
+              inputDecorationTheme: baseTheme.inputDecorationTheme.copyWith(
+                fillColor: AppColors.surfaceElevated.withValues(alpha: .42),
+              ),
+            ),
+            child: child,
+          ),
         ),
       ),
     );
