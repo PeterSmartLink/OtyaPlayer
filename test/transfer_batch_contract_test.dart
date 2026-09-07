@@ -15,8 +15,8 @@ void main() {
     ).readAsStringSync();
 
     expect(sender, contains('startServingBatch'));
-    expect(sender, contains("/batch?t=\${session.token}"));
-    expect(sender, contains("/media/\$i?t=\$token"));
+    expect(sender, contains(r'/batch?t=${session.token}'));
+    expect(sender, contains(r'/media/$i?t=$token'));
     expect(sender, contains("'files': items"));
     expect(sender, isNot(contains('ZipFile')));
     expect(sender, isNot(contains('.zip')));
