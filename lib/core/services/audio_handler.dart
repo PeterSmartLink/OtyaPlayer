@@ -42,17 +42,26 @@ class OtyaAudioHandler extends BaseAudioHandler with SeekHandler {
     }
   }
 
+  bool _isCurrentPlayer(Player player) => identical(_player, player);
+
   void _subscribeToPlayer(Player player) {
-    _playingSub = player.stream.playing.listen(
-      (playing) => _updatePlaybackState(playing: playing),
-    );
-    _bufferingSub = player.stream.buffering.listen(
-      (buffering) => _updatePlaybackState(buffering: buffering),
-    );
-    _positionSub = player.stream.position.listen(
-      (position) => _updatePlaybackState(position: position),
-    );
+    // StreamSubscription.cancel() completes asynchronously. Guard every
+    // callback as well so a queued event from the previous player can never
+    // overwrite MediaSession state after a rapid track/player handoff.
+    _playingSub = player.stream.playing.listen((playing) {
+      if (!_isCurrentPlayer(player)) return;
+      _updatePlaybackState(playing: playing);
+    });
+    _bufferingSub = player.stream.buffering.listen((buffering) {
+      if (!_isCurrentPlayer(player)) return;
+      _updatePlaybackState(buffering: buffering);
+    });
+    _positionSub = player.stream.position.listen((position) {
+      if (!_isCurrentPlayer(player)) return;
+      _updatePlaybackState(position: position);
+    });
     _durationSub = player.stream.duration.listen((duration) {
+      if (!_isCurrentPlayer(player)) return;
       final current = mediaItem.value;
       if (current != null && duration != Duration.zero) {
         mediaItem.add(current.copyWith(duration: duration));
