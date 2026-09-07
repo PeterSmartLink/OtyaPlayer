@@ -1,0 +1,63 @@
+name: Materialize Otya dependency lock
+
+on:
+  push:
+    branches:
+      - fix/publish-visible-new-way-20260906
+
+permissions:
+  contents: write
+
+jobs:
+  materialize_lock:
+    name: Commit verified pubspec lock
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout recovery branch
+        uses: actions/checkout@v6
+        with:
+          ref: fix/publish-visible-new-way-20260906
+          fetch-depth: 0
+
+      - name: Stop when the verified lock is already committed
+        id: guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected='bcc3c6d6246ce3d3e0a7c4b0b8ab2f6fc0051ea82cf93be26bc64771becf15d3'
+          if [ -s pubspec.lock ] && [ "$(sha256sum pubspec.lock | awk '{print $1}')" = "$expected" ]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download exact lock candidate from validated CI run
+        if: steps.guard.outputs.ready != 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: Otya-dependency-lock-candidate
+          path: build/lock-candidate
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 34135538207
+
+      - name: Verify and commit exact dependency graph
+        if: steps.guard.outputs.ready != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate='build/lock-candidate/pubspec.lock'
+          test -s "$candidate" || { echo 'ERROR: dependency lock artifact is missing'; exit 1; }
+          expected='bcc3c6d6246ce3d3e0a7c4b0b8ab2f6fc0051ea82cf93be26bc64771becf15d3'
+          actual="$(sha256sum "$candidate" | awk '{print $1}')"
+          test "$actual" = "$expected" || {
+            echo "ERROR: lock candidate digest mismatch: $actual"
+            exit 1
+          }
+          cp "$candidate" pubspec.lock
+          git add pubspec.lock
+          git diff --cached --quiet && exit 0
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Lock Otya Flutter dependency graph'
+          git push origin HEAD:fix/publish-visible-new-way-20260906
