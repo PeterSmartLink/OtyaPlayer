@@ -9,15 +9,15 @@ import '../../../../core/services/playback_coordinator.dart';
 
 /// Gesture layer for the video player.
 ///
-/// Left-half vertical swipe  → brightness
-/// Right-half vertical swipe → volume
+/// Left edge vertical swipe  → brightness
+/// Right edge vertical swipe → volume
 /// Double-tap left/right     → seek ±10 seconds
 /// Horizontal fling          → seek ±10 seconds
 /// Long press                → real 2× playback while held
 ///
-/// Vertical gestures deliberately exclude the Android system-edge regions so
-/// OTYA never competes with status/navigation gestures. A single detector owns
-/// drag arbitration, avoiding the old nested-detector "tap first" behaviour.
+/// The middle of the video is deliberately left calm for playback controls.
+/// Feedback appears close to the gesture origin instead of floating in the
+/// centre of the picture, which keeps faces/subtitles visible on small phones.
 class VideoGestureLayer extends StatefulWidget {
   final Widget child;
   final void Function(Duration delta)? onSeek;
@@ -33,8 +33,12 @@ class VideoGestureLayer extends StatefulWidget {
 }
 
 class _VideoGestureLayerState extends State<VideoGestureLayer> {
-  static const _brightnessChannel = MethodChannel('com.otyaplayer.app/brightness');
+  static const _brightnessChannel =
+      MethodChannel('com.otyaplayer.app/brightness');
   static const _volumeChannel = MethodChannel('com.otyaplayer.app/volume');
+
+  // Keep the central 24% of the video free of brightness/volume gestures.
+  static const double _edgeGestureFraction = .38;
 
   final _brightness = ValueNotifier<double>(0.5);
   final _volume = ValueNotifier<double>(0.5);
@@ -50,6 +54,8 @@ class _VideoGestureLayerState extends State<VideoGestureLayer> {
   double _horizontalDrag = 0;
   bool _dragIsVertical = false;
   bool _dragDirectionLocked = false;
+  double _hudCenterY = 0;
+  double _seekCenterY = 0;
 
   @override
   void initState() {
@@ -70,7 +76,7 @@ class _VideoGestureLayerState extends State<VideoGestureLayer> {
 
   void _scheduleHudHide() {
     _hudTimer?.cancel();
-    _hudTimer = Timer(const Duration(milliseconds: 1200), () {
+    _hudTimer = Timer(const Duration(milliseconds: 1100), () {
       _showBrightness.value = false;
       _showVolume.value = false;
     });
@@ -98,19 +104,38 @@ class _VideoGestureLayerState extends State<VideoGestureLayer> {
     _scheduleHudHide();
   }
 
-  void _seek(bool forward) {
+  void _seek(bool forward, {double? atY}) {
     if (widget.onSeek == null) return;
     widget.onSeek!(Duration(seconds: forward ? 10 : -10));
     HapticFeedback.mediumImpact();
     if (!mounted) return;
     setState(() {
       _seekForward = forward;
+      _seekCenterY = atY ??
+          _dragStart?.dy ??
+          MediaQuery.sizeOf(context).height * .5;
       _showSeekRipple = true;
     });
     _seekTimer?.cancel();
-    _seekTimer = Timer(const Duration(milliseconds: 650), () {
+    _seekTimer = Timer(const Duration(milliseconds: 560), () {
       if (mounted) setState(() => _showSeekRipple = false);
     });
+  }
+
+  void _handleDoubleTap(Offset position, Size size, EdgeInsets safe) {
+    final topGuard = (safe.top + 24).clamp(32.0, 68.0);
+    final bottomGuard = (safe.bottom + 34).clamp(44.0, 82.0);
+    if (position.dy < topGuard || position.dy > size.height - bottomGuard) {
+      return;
+    }
+
+    // A double tap in the calm centre does not accidentally seek. Only the
+    // natural left/right seek zones respond.
+    if (position.dx <= size.width * _edgeGestureFraction) {
+      _seek(false, atY: position.dy);
+    } else if (position.dx >= size.width * (1 - _edgeGestureFraction)) {
+      _seek(true, atY: position.dy);
+    }
   }
 
   Future<void> _beginSpeedBoost() async {
@@ -139,8 +164,6 @@ class _VideoGestureLayerState extends State<VideoGestureLayer> {
     final start = _dragStart;
     if (start == null) return;
 
-    // Keep player gestures comfortably away from Android's system regions,
-    // including devices reporting zero insets while immersive mode is active.
     final topGuard = (safe.top + 28).clamp(36.0, 72.0);
     final bottomGuard = (safe.bottom + 40).clamp(48.0, 88.0);
     if (start.dy < topGuard || start.dy > size.height - bottomGuard) return;
@@ -150,13 +173,24 @@ class _VideoGestureLayerState extends State<VideoGestureLayer> {
       if (total.distance < 7) return;
       _dragIsVertical = total.dy.abs() > total.dx.abs() * 1.15;
       _dragDirectionLocked = true;
+      if (_dragIsVertical) {
+        final inLeft = start.dx <= size.width * _edgeGestureFraction;
+        final inRight =
+            start.dx >= size.width * (1 - _edgeGestureFraction);
+        if (!inLeft && !inRight) return;
+        _hudCenterY = start.dy;
+      }
     }
 
     if (_dragIsVertical) {
-      final delta = -details.delta.dy / (size.height * 0.42).clamp(180.0, 360.0);
-      if (start.dx < size.width / 2) {
+      final inLeft = start.dx <= size.width * _edgeGestureFraction;
+      final inRight = start.dx >= size.width * (1 - _edgeGestureFraction);
+      if (!inLeft && !inRight) return;
+      final delta =
+          -details.delta.dy / (size.height * 0.42).clamp(180.0, 360.0);
+      if (inLeft) {
         _applyBrightness(delta);
-      } else {
+      } else if (inRight) {
         _applyVolume(delta);
       }
     } else {
@@ -168,7 +202,10 @@ class _VideoGestureLayerState extends State<VideoGestureLayer> {
     if (_dragDirectionLocked && !_dragIsVertical) {
       final velocity = details.velocity.pixelsPerSecond.dx;
       if (_horizontalDrag.abs() >= 54 || velocity.abs() >= 520) {
-        _seek(_horizontalDrag != 0 ? _horizontalDrag > 0 : velocity > 0);
+        _seek(
+          _horizontalDrag != 0 ? _horizontalDrag > 0 : velocity > 0,
+          atY: _dragStart?.dy,
+        );
       }
     }
     _dragStart = null;
@@ -188,6 +225,22 @@ class _VideoGestureLayerState extends State<VideoGestureLayer> {
     super.dispose();
   }
 
+  double _hudTop(Size size, EdgeInsets safe) {
+    const estimatedHudHeight = 158.0;
+    final minTop = safe.top + 12;
+    final maxTop = mathMax(minTop, size.height - safe.bottom - estimatedHudHeight - 12);
+    return (_hudCenterY - estimatedHudHeight / 2).clamp(minTop, maxTop);
+  }
+
+  double _seekTop(Size size, EdgeInsets safe) {
+    const diameter = 72.0;
+    final minTop = safe.top + 18;
+    final maxTop = mathMax(minTop, size.height - safe.bottom - diameter - 18);
+    return (_seekCenterY - diameter / 2).clamp(minTop, maxTop);
+  }
+
+  static double mathMax(double a, double b) => a > b ? a : b;
+
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
@@ -200,7 +253,8 @@ class _VideoGestureLayerState extends State<VideoGestureLayer> {
         Positioned.fill(
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
-            onDoubleTapDown: (details) => _seek(details.localPosition.dx >= size.width / 2),
+            onDoubleTapDown: (details) =>
+                _handleDoubleTap(details.localPosition, size, safe),
             onPanStart: _onPanStart,
             onPanUpdate: (d) => _onPanUpdate(d, size, safe),
             onPanEnd: _onPanEnd,
@@ -219,21 +273,33 @@ class _VideoGestureLayerState extends State<VideoGestureLayer> {
             top: safe.top + 18,
             left: 0,
             right: 0,
-            child: const Center(child: _StatusPill(icon: Icons.fast_forward_rounded, label: '2× Speed')),
+            child: const Center(
+              child: _StatusPill(
+                icon: Icons.fast_forward_rounded,
+                label: '2× Speed',
+              ),
+            ),
           ),
         if (_showSeekRipple)
-          Positioned.fill(child: IgnorePointer(child: _SeekRipple(forward: _seekForward))),
+          Positioned(
+            left: _seekForward ? null : 22,
+            right: _seekForward ? 22 : null,
+            top: _seekTop(size, safe),
+            child: IgnorePointer(
+              child: _SeekRipple(forward: _seekForward),
+            ),
+          ),
         ValueListenableBuilder<bool>(
           valueListenable: _showBrightness,
           builder: (_, show, __) => show
               ? Positioned(
-                  left: 20,
-                  top: safe.top,
-                  bottom: safe.bottom,
-                  child: Center(
-                    child: ValueListenableBuilder<double>(
-                      valueListenable: _brightness,
-                      builder: (_, value, __) => _GlassHud(icon: Icons.brightness_6_rounded, value: value),
+                  left: 14,
+                  top: _hudTop(size, safe),
+                  child: ValueListenableBuilder<double>(
+                    valueListenable: _brightness,
+                    builder: (_, value, __) => _GlassHud(
+                      icon: Icons.brightness_6_rounded,
+                      value: value,
                     ),
                   ),
                 )
@@ -243,16 +309,17 @@ class _VideoGestureLayerState extends State<VideoGestureLayer> {
           valueListenable: _showVolume,
           builder: (_, show, __) => show
               ? Positioned(
-                  right: 20,
-                  top: safe.top,
-                  bottom: safe.bottom,
-                  child: Center(
-                    child: ValueListenableBuilder<double>(
-                      valueListenable: _volume,
-                      builder: (_, value, __) => _GlassHud(
-                        icon: value == 0 ? Icons.volume_off_rounded : value < 0.5 ? Icons.volume_down_rounded : Icons.volume_up_rounded,
-                        value: value,
-                      ),
+                  right: 14,
+                  top: _hudTop(size, safe),
+                  child: ValueListenableBuilder<double>(
+                    valueListenable: _volume,
+                    builder: (_, value, __) => _GlassHud(
+                      icon: value == 0
+                          ? Icons.volume_off_rounded
+                          : value < 0.5
+                              ? Icons.volume_down_rounded
+                              : Icons.volume_up_rounded,
+                      value: value,
                     ),
                   ),
                 )
@@ -267,76 +334,144 @@ class _StatusPill extends StatelessWidget {
   final IconData icon;
   final String label;
   const _StatusPill({required this.icon, required this.label});
+
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-    decoration: BoxDecoration(
-      color: Colors.black.withValues(alpha: 0.72),
-      borderRadius: BorderRadius.circular(999),
-      border: Border.all(color: AppColors.accent.withValues(alpha: 0.45)),
-    ),
-    child: Row(mainAxisSize: MainAxisSize.min, children: [
-      Icon(icon, color: AppColors.accent, size: 18),
-      const SizedBox(width: 6),
-      Text(label, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700, fontFamily: 'Inter')),
-    ]),
-  );
+  Widget build(BuildContext context) => ClipRRect(
+        borderRadius: BorderRadius.circular(999),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.surface.withValues(alpha: .58),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: AppColors.brandCyan.withValues(alpha: .28),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: AppColors.brandCyan, size: 18),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Inter',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
 }
 
 class _GlassHud extends StatelessWidget {
   final IconData icon;
   final double value;
   const _GlassHud({required this.icon, required this.value});
+
   @override
   Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(18),
-    child: BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-      child: Container(
-        width: 64,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.55),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.accent.withValues(alpha: 0.26)),
+        borderRadius: BorderRadius.circular(18),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Container(
+            width: 56,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.surface.withValues(alpha: .58),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: AppColors.brandCyan.withValues(alpha: .24),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: AppColors.brandCyan, size: 20),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 86,
+                  width: 6,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(99),
+                    child: Stack(
+                      children: [
+                        Container(color: Colors.white.withValues(alpha: .12)),
+                        Align(
+                          alignment: Alignment.bottomCenter,
+                          child: FractionallySizedBox(
+                            heightFactor: value.clamp(0.0, 1.0),
+                            child: Container(color: AppColors.brandCyan),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${(value * 100).round()}%',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Inter',
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, color: AppColors.accent, size: 21),
-          const SizedBox(height: 12),
-          SizedBox(height: 96, width: 7, child: ClipRRect(
-            borderRadius: BorderRadius.circular(99),
-            child: Stack(children: [
-              Container(color: Colors.white.withValues(alpha: 0.12)),
-              Align(alignment: Alignment.bottomCenter, child: FractionallySizedBox(
-                heightFactor: value.clamp(0.0, 1.0), child: Container(color: AppColors.accent),
-              )),
-            ]),
-          )),
-          const SizedBox(height: 10),
-          Text('${(value * 100).round()}%', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700, fontFamily: 'Inter')),
-        ]),
-      ),
-    ),
-  );
+      );
 }
 
 class _SeekRipple extends StatelessWidget {
   final bool forward;
   const _SeekRipple({required this.forward});
+
   @override
-  Widget build(BuildContext context) => Align(
-    alignment: forward ? Alignment.centerRight : Alignment.centerLeft,
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 38),
-      child: Container(
-        width: 78, height: 78,
-        decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withValues(alpha: 0.40), border: Border.all(color: AppColors.accent.withValues(alpha: 0.55))),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(forward ? Icons.forward_10_rounded : Icons.replay_10_rounded, color: Colors.white, size: 28),
-          const SizedBox(height: 2),
-          Text(forward ? '+10s' : '-10s', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700, fontFamily: 'Inter')),
-        ]),
-      ),
-    ),
-  );
+  Widget build(BuildContext context) => ClipOval(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.surface.withValues(alpha: .50),
+              border: Border.all(
+                color: AppColors.brandCyan.withValues(alpha: .40),
+              ),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  forward
+                      ? Icons.forward_10_rounded
+                      : Icons.replay_10_rounded,
+                  color: Colors.white,
+                  size: 26,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  forward ? '+10s' : '-10s',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Inter',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
 }
