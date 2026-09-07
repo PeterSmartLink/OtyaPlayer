@@ -27,7 +27,7 @@ void main() {
       final workflow = File(path).readAsStringSync();
       expect(workflow, contains('test -s pubspec.lock'), reason: path);
       expect(workflow, contains('flutter pub get'), reason: path);
-      expect(workflow, contains("sha256sum pubspec.lock"), reason: path);
+      expect(workflow, contains('sha256sum pubspec.lock'), reason: path);
       expect(
         workflow,
         contains('git diff --exit-code -- pubspec.lock'),
