@@ -27,7 +27,7 @@ void main() {
     );
   });
 
-  test('offline hotspot QR is a standard Wi-Fi payload', () {
+  test('hotspot QR is a standard Wi-Fi payload', () {
     const info = OtyaHotspotInfo(
       ssid: 'Otya;Nearby',
       passphrase: 'abc:123',
@@ -39,18 +39,31 @@ void main() {
     expect(info.wifiQrPayload, contains(r'P:abc\:123'));
   });
 
-  test('Send exposes offline networking without a new main-navigation tab', () {
+  test('Send is connection-first without exposing an Offline network mini-feature', () {
     final entry = File(
       'lib/features/air_drop/presentation/air_drop_screen.dart',
+    ).readAsStringSync();
+    final transfer = File(
+      'lib/features/transfer/presentation/transfer_screen.dart',
     ).readAsStringSync();
     final hotspot = File(
       'lib/features/transfer/data/transfer_hotspot_service.dart',
     ).readAsStringSync();
     final router = File('lib/app/router.dart').readAsStringSync();
 
-    expect(entry, contains("'Offline network'"));
-    expect(entry, contains('wifiQrPayload'));
     expect(entry, contains('const TransferScreen()'));
+    expect(entry, isNot(contains("'Offline network'")));
+    expect(entry, isNot(contains('FloatingActionButton')));
+
+    expect(transfer, contains("primaryLabel: 'Create hotspot'"));
+    expect(transfer, contains("secondaryLabel: 'Use current Wi-Fi'"));
+    expect(transfer, contains("title: 'Connect to the sender'"));
+    expect(transfer, contains("label: 'Videos'"));
+    expect(transfer, contains("label: 'Music'"));
+    expect(transfer, contains("Received/$folder"));
+    expect(transfer, isNot(contains('Local network only')));
+    expect(transfer, isNot(contains('Offline network')));
+
     expect(hotspot, contains('ensureLocalNetworkAccess()'));
     expect(hotspot, contains('Permission.nearbyWifiDevices.request()'));
     expect(hotspot, contains('Permission.locationWhenInUse.request()'));
