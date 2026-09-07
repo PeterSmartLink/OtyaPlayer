@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:otya_transfer_android/otya_transfer_android.dart';
 
 import 'transfer_security_policy.dart';
 
@@ -30,6 +31,7 @@ class MediaReceiver {
   static const int _maxBatchBytes = 64 * 1024 * 1024 * 1024;
   static const int _maxManifestBytes = 256 * 1024;
   static const int _maxBatchItems = 200;
+  static const int _storageReserveBytes = 64 * 1024 * 1024;
   static const Set<String> _supportedExtensions = {
     'mp4',
     'mkv',
@@ -274,6 +276,17 @@ class MediaReceiver {
         );
       }
 
+      final availableBytes =
+          await OtyaTransferAndroid.availableBytes(saveFile.parent.path);
+      final requiredAvailable = responseBytes + _storageReserveBytes;
+      if (availableBytes != null && availableBytes < requiredAvailable) {
+        await response.drain<void>();
+        throw InsufficientTransferStorageException(
+          requiredBytes: requiredAvailable,
+          availableBytes: availableBytes,
+        );
+      }
+
       var downloaded = existingBytes;
       sink = saveFile.openWrite(
         mode: isResume ? FileMode.append : FileMode.writeOnly,
@@ -411,4 +424,17 @@ class TransferCancelledException implements Exception {
 
   @override
   String toString() => 'Transfer was cancelled.';
+}
+
+class InsufficientTransferStorageException implements Exception {
+  const InsufficientTransferStorageException({
+    required this.requiredBytes,
+    required this.availableBytes,
+  });
+
+  final int requiredBytes;
+  final int availableBytes;
+
+  @override
+  String toString() => 'Not enough free storage for this transfer.';
 }
