@@ -1,0 +1,38 @@
+name: One-shot restore Anywhere runtime
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/one-shot-restore-anywhere-runtime.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Restore audited Anywhere runtime only
+        env:
+          EXPECTED_PARENT: 669433bf7db9e581c4af158ec7ea6350a97cc0a2
+          SOURCE_COMMIT: d1500b79413c79edf775f7a3420e03abf6c5d769
+          TARGET: lib/features/together/application/anywhere_together_runtime.dart
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_PARENT"
+          git cat-file -e "$SOURCE_COMMIT^{commit}"
+          git cat-file -e "$SOURCE_COMMIT:$TARGET"
+          mkdir -p "$(dirname "$TARGET")"
+          git show "$SOURCE_COMMIT:$TARGET" > "$TARGET"
+          test "$(git hash-object "$TARGET")" = "$(git rev-parse "$SOURCE_COMMIT:$TARGET")"
+          rm .github/workflows/one-shot-restore-anywhere-runtime.yml
+          git config user.name 'PeterSmart Link'
+          git config user.email 'petersmartlink@gmail.com'
+          git add "$TARGET" .github/workflows/one-shot-restore-anywhere-runtime.yml
+          git commit -m 'feat(together): restore validated Anywhere runtime'
+          git push origin HEAD:main
