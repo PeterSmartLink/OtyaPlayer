@@ -72,69 +72,36 @@ jobs:
               -dname 'CN=Android Debug,O=Android,C=US'
           fi
 
-      - name: Build release-mode ARM64 APK
+      - name: Build release-mode ARM64 APK with production runtime config
         env:
           FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
           OTYA_ALLOW_DEBUG_SIGNING: 'true'
+          OTYA_SELF_UPDATE: 'true'
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$FIREBASE_API_KEY" || { echo 'ERROR: FIREBASE_API_KEY is missing'; exit 1; }
+          source scripts/android-release-config.sh
           flutter build apk --release \
             --target-platform android-arm64 \
-            --dart-define=SELF_UPDATE=true \
-            --dart-define=GOOGLE_WEB_CLIENT_ID="82776565585-obr8k53b8n6djsggissv8qne81cm3u5u.apps.googleusercontent.com" \
-            --dart-define=FIREBASE_API_KEY="$FIREBASE_API_KEY" \
-            --dart-define=FIREBASE_APP_ID="1:82776565585:android:085cf9b4eecb76e9535570" \
-            --dart-define=FIREBASE_MESSAGING_SENDER_ID="82776565585" \
-            --dart-define=FIREBASE_PROJECT_ID="otya-player"
+            "${OTYA_RELEASE_DART_DEFINES[@]}"
+          mkdir -p build/release-mode-evidence
           cp build/app/outputs/flutter-apk/app-release.apk build/Otya-release-mode-test.apk
 
-      - name: Verify release-mode Android contract
+      - name: Verify final release-mode Android binary
         shell: bash
         run: |
           set -euo pipefail
-          APK='build/Otya-release-mode-test.apk'
-          test -s "$APK" || { echo 'ERROR: release-mode APK missing'; exit 1; }
-          test "$(stat -c%s "$APK")" -gt 5000000 || { echo 'ERROR: release-mode APK is unexpectedly small'; exit 1; }
-
-          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner -print | sort -V | tail -n 1)"
-          test -x "$APKSIGNER" || { echo 'ERROR: apksigner not found'; exit 1; }
-          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee build/Otya-release-mode-signing.txt
-
-          APKKIT="$(find "$ANDROID_HOME" -type f -name apkanalyzer -print | sort | tail -n 1)"
-          test -x "$APKKIT" || { echo 'ERROR: apkanalyzer not found'; exit 1; }
-          "$APKKIT" manifest print "$APK" > build/Otya-release-mode-manifest.xml
-          "$APKKIT" dex packages "$APK" > build/Otya-release-mode-dex.txt
-
-          # The published/minified binary—not merely source—must retain the
-          # complete Android media-session contract that powers notification,
-          # lock-screen and headset playback controls.
-          grep -q 'com.ryanheise.audioservice.AudioService' build/Otya-release-mode-manifest.xml
-          grep -q 'com.ryanheise.audioservice.MediaButtonReceiver' build/Otya-release-mode-manifest.xml
-          grep -q 'android:foregroundServiceType="mediaPlayback"' build/Otya-release-mode-manifest.xml
-          grep -q 'android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK' build/Otya-release-mode-manifest.xml
-          grep -q 'android.permission.POST_NOTIFICATIONS' build/Otya-release-mode-manifest.xml
-          grep -q 'com.ryanheise.audioservice.NOTIFICATION_CHANNEL_ID' build/Otya-release-mode-manifest.xml
-          grep -q 'com.otyaplayer.app.audio' build/Otya-release-mode-manifest.xml
-          grep -q 'com.ryanheise.audioservice.AudioService' build/Otya-release-mode-dex.txt
-          grep -q 'com.ryanheise.audioservice.MediaButtonReceiver' build/Otya-release-mode-dex.txt
-
-          # New Way Send is optional/contextual, but if shipped its scoped
-          # Android permission must survive the release manifest too.
-          grep -q 'android.permission.NEARBY_WIFI_DEVICES' build/Otya-release-mode-manifest.xml
-
-          sha256sum "$APK" | tee build/Otya-release-mode-checksum.txt
+          bash scripts/verify-android-release-apk.sh \
+            build/Otya-release-mode-test.apk \
+            build/release-mode-evidence
 
       - name: Save release-mode evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: Otya-release-mode-validation
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
           path: |
             build/Otya-release-mode-test.apk
-            build/Otya-release-mode-signing.txt
-            build/Otya-release-mode-manifest.xml
-            build/Otya-release-mode-dex.txt
-            build/Otya-release-mode-checksum.txt
+            build/release-mode-evidence/**
