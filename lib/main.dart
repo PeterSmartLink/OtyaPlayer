@@ -203,12 +203,18 @@ Future<void> _initPlaybackPlatformOnce() async {
     config: AudioServiceConfig(
       androidNotificationChannelId: 'com.otyaplayer.app.audio',
       androidNotificationChannelName: 'Otya — Now Playing',
+      // Keep the media foreground service alive while paused so Android does
+      // not need to recreate it when playback resumes. The notification remains
+      // dismissible; deleting it intentionally invokes the handler's stop path.
       androidNotificationOngoing: false,
       androidStopForegroundOnPause: false,
       androidNotificationIcon: 'drawable/ic_notification',
       notificationColor: AppColors.brandBlue,
       androidShowNotificationBadge: false,
-      preloadArtwork: true,
+      // Artwork is resolved asynchronously by MediaNotificationService. Do not
+      // let a file/content URI decode delay or prevent the core MediaSession
+      // notification and lock-screen controls from becoming available.
+      preloadArtwork: false,
     ),
   );
   AudioHandlerSingleton.instance.handler = audioHandler;
