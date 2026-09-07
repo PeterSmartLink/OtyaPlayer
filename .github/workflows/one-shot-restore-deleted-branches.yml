@@ -21,10 +21,11 @@ jobs:
           gh api --paginate "repos/$REPO/git/matching-refs/heads/" --jq '.[].ref' |
           sed 's#^refs/heads/##' | sort | while IFS= read -r branch; do
             [ "$branch" = "main" ] && continue
-            gh api "repos/$REPO/compare/main...$branch" --jq '
-              "AUDIT|" + $branch +
-              "|status=" + .status +
-              "|ahead=" + (.ahead_by|tostring) +
-              "|behind=" + (.behind_by|tostring) +
-              "|files=" + ([.files[].filename] | join(","))' --arg branch "$branch"
+            gh api "repos/$REPO/compare/main...$branch" |
+              jq -r --arg branch "$branch" '
+                "AUDIT|" + $branch +
+                "|status=" + .status +
+                "|ahead=" + (.ahead_by|tostring) +
+                "|behind=" + (.behind_by|tostring) +
+                "|files=" + ([.files[].filename] | join(","))'
           done
