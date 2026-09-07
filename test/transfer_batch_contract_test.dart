@@ -32,17 +32,31 @@ void main() {
     expect(policy, contains("uri.path == '/media'"));
   });
 
-  test('received batches are bounded as a whole and cannot repeat one URL', () {
+  test('sender and receiver enforce the same per-file and aggregate bounds', () {
+    final sender = File(
+      'lib/features/transfer/data/media_sender.dart',
+    ).readAsStringSync();
     final receiver = File(
       'lib/features/transfer/data/media_receiver.dart',
     ).readAsStringSync();
 
-    expect(receiver, contains('_maxBatchItems = 200'));
-    expect(receiver, contains('_maxBatchBytes = 64 * 1024 * 1024 * 1024'));
+    for (final source in [sender, receiver]) {
+      expect(source, contains('_maxBatchItems = 200'));
+      expect(source, contains('_maxTransferBytes = 16 * 1024 * 1024 * 1024'));
+      expect(source, contains('_maxBatchBytes = 64 * 1024 * 1024 * 1024'));
+    }
+    expect(sender, contains('if (length > _maxTransferBytes)'));
+    expect(sender, contains('if (totalBatchBytes > _maxBatchBytes)'));
+    expect(receiver, contains('if (totalBatchBytes > _maxBatchBytes)'));
+  });
+
+  test('received batches cannot repeat one authenticated media URL', () {
+    final receiver = File(
+      'lib/features/transfer/data/media_receiver.dart',
+    ).readAsStringSync();
+
     expect(receiver, contains('final seenUrls = <String>{}'));
     expect(receiver, contains('if (!seenUrls.add(normalizedUrl))'));
-    expect(receiver, contains('totalBatchBytes += size'));
-    expect(receiver, contains('if (totalBatchBytes > _maxBatchBytes)'));
   });
 
   test('Receive preflights Android storage before opening the destination sink', () {
