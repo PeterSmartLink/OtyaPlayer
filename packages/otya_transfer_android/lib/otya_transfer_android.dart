@@ -57,6 +57,18 @@ class OtyaTransferAndroid {
     return await _channel.invokeMethod<int>('sdkInt') ?? -1;
   }
 
+  /// Returns bytes currently available on the filesystem containing [path].
+  /// Null means the platform cannot provide a trustworthy value; callers must
+  /// continue to enforce stream-size limits even when preflight is unavailable.
+  static Future<int?> availableBytes(String path) async {
+    if (!Platform.isAndroid) return null;
+    final value = await _channel.invokeMethod<int>(
+      'availableBytes',
+      <String, Object?>{'path': path},
+    );
+    return value != null && value >= 0 ? value : null;
+  }
+
   static Future<OtyaHotspotInfo> startLocalOnlyHotspot() async {
     if (!Platform.isAndroid) {
       throw PlatformException(
