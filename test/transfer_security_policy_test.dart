@@ -26,12 +26,51 @@ void main() {
   });
 
   group('transfer URI policy', () {
-    test('accepts one authenticated /media URL on a local host', () {
+    test('accepts authenticated single and indexed media URLs locally', () {
       expect(
         isAllowedTransferUri(
           Uri.parse('http://192.168.1.20:8080/media?t=$token&name=song.mp3'),
         ),
         isTrue,
+      );
+      expect(
+        isAllowedTransferUri(
+          Uri.parse('http://192.168.1.20:8080/media/0?t=$token'),
+        ),
+        isTrue,
+      );
+      expect(
+        isAllowedTransferUri(
+          Uri.parse('http://10.0.0.8:8080/media/199?t=$token'),
+        ),
+        isTrue,
+      );
+    });
+
+    test('accepts only an authenticated local batch manifest URL', () {
+      expect(
+        isAllowedTransferBatchUri(
+          Uri.parse('http://192.168.1.20:8080/batch?t=$token'),
+        ),
+        isTrue,
+      );
+      expect(
+        isAllowedTransferBatchUri(
+          Uri.parse('https://192.168.1.20:8080/batch?t=$token'),
+        ),
+        isFalse,
+      );
+      expect(
+        isAllowedTransferBatchUri(
+          Uri.parse('http://example.com:8080/batch?t=$token'),
+        ),
+        isFalse,
+      );
+      expect(
+        isAllowedTransferUri(
+          Uri.parse('http://192.168.1.20:8080/batch?t=$token'),
+        ),
+        isFalse,
       );
     });
 
@@ -56,6 +95,7 @@ void main() {
         'http://example.com/media?t=$token',
         'http://169.254.1.2/media?t=$token',
         'http://192.168.1.20/other?t=$token',
+        'http://192.168.1.20/media/not-an-index?t=$token',
         'http://user@192.168.1.20/media?t=$token',
         'http://192.168.1.20/media?t=short',
         'http://192.168.1.20/media?t=$token&t=$token',
