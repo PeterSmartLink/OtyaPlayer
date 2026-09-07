@@ -30,6 +30,16 @@ require_regex() {
   fi
 }
 
+reject_literal() {
+  local file="$1"
+  local needle="$2"
+  local label="$3"
+  if grep -Fq -- "$needle" "$file"; then
+    echo "ERROR: release APK unexpectedly contains $label ($needle)" >&2
+    return 1
+  fi
+}
+
 [ -s "$APK" ] || fail "release APK missing or empty: $APK"
 [ "$(stat -c%s "$APK")" -gt 5000000 ] || fail "release APK is unexpectedly small"
 
@@ -81,6 +91,13 @@ require_literal "$EVIDENCE_DIR/permissions.txt" 'android.permission.WAKE_LOCK' '
 require_literal "$EVIDENCE_DIR/permissions.txt" 'android.permission.POST_NOTIFICATIONS' 'notification permission declaration'
 require_literal "$EVIDENCE_DIR/permissions.txt" 'android.permission.NEARBY_WIFI_DEVICES' 'Nearby Wi-Fi permission for Otya Send'
 require_literal "$EVIDENCE_DIR/permissions.txt" 'android.permission.CHANGE_WIFI_STATE' 'Wi-Fi state permission for Otya Send'
+
+# Otya does not sell ads or need a cross-app advertising identity. Firebase
+# Analytics/Performance remain usable for product telemetry without allowing
+# transitive Google manifests to broaden the installed identifier permissions.
+reject_literal "$EVIDENCE_DIR/permissions.txt" 'com.google.android.gms.permission.AD_ID' 'Google advertising ID permission'
+reject_literal "$EVIDENCE_DIR/permissions.txt" 'android.permission.ACCESS_ADSERVICES_AD_ID' 'Android AdServices advertising ID permission'
+reject_literal "$EVIDENCE_DIR/permissions.txt" 'android.permission.ACCESS_ADSERVICES_ATTRIBUTION' 'Android AdServices attribution permission'
 
 # R8 must retain Android entry points loaded by class name/reflection.
 require_literal "$EVIDENCE_DIR/dex-packages.txt" 'com.ryanheise.audioservice.AudioService' 'AudioService class after R8'
