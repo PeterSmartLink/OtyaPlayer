@@ -26,10 +26,9 @@ final _miniDurationProvider = Provider<Duration>((ref) {
 
 /// Persistent Now Playing surface used across the app.
 ///
-/// Design rule: media artwork is the visual focus; OTYA blue is reserved for
-/// playback state/progress. The surface uses restrained glass treatment so it
-/// remains visually connected to the content behind it without hurting text or
-/// control contrast.
+/// The shell owns device bottom insets. This surface intentionally does not add
+/// another safe-area offset: on phones it must sit immediately above Video ·
+/// Music · Me instead of floating a second navigation-height above it.
 class MiniPlayer extends ConsumerStatefulWidget {
   const MiniPlayer({super.key});
 
@@ -104,8 +103,6 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
     final displayItem = item ?? _lastItem;
     if (displayItem == null) return const SizedBox.shrink();
 
-    final bottomInset = MediaQuery.of(context).padding.bottom;
-
     return SlideTransition(
       position: _slideAnim,
       child: GestureDetector(
@@ -138,31 +135,40 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 80),
           transform: Matrix4.translationValues(0, _dragOffset, 0),
-          margin: EdgeInsets.fromLTRB(12, 0, 12, 8 + bottomInset),
+          margin: const EdgeInsets.fromLTRB(10, 0, 10, 3),
           child: Opacity(
             opacity: (1 - _dragOffset / (_dismissThreshold * 1.5))
                 .clamp(0.0, 1.0),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(18),
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: AppColors.surface.withValues(alpha: 0.84),
-                    borderRadius: BorderRadius.circular(20),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        AppColors.surfaceElevated.withValues(alpha: .96),
+                        AppColors.surface.withValues(alpha: .92),
+                        AppColors.brandDeepBlue.withValues(alpha: .17),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(18),
                     border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.08),
+                      color: AppColors.brandCyan.withValues(alpha: .20),
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.28),
-                        blurRadius: 22,
-                        offset: const Offset(0, 10),
+                        color: AppColors.brandBlue.withValues(alpha: .18),
+                        blurRadius: 24,
+                        spreadRadius: -8,
+                        offset: const Offset(0, 8),
                       ),
                       BoxShadow(
-                        color: AppColors.accent.withValues(alpha: 0.07),
-                        blurRadius: 26,
-                        spreadRadius: -10,
+                        color: Colors.black.withValues(alpha: .18),
+                        blurRadius: 16,
+                        offset: const Offset(0, 7),
                       ),
                     ],
                   ),
@@ -170,25 +176,25 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       SizedBox(
-                        height: 70,
+                        height: 64,
                         child: Row(
                           children: [
                             Padding(
-                              padding: const EdgeInsets.all(8),
+                              padding: const EdgeInsets.all(7),
                               child: ClipRRect(
-                                borderRadius: BorderRadius.circular(13),
+                                borderRadius: BorderRadius.circular(12),
                                 child: AlbumArtThumb(
                                   albumArtPath: displayItem.albumArtPath,
-                                  size: 54,
+                                  size: 50,
                                   borderRadius: 0,
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 3),
+                            const SizedBox(width: 2),
                             Expanded(
                               child: Padding(
                                 padding:
-                                    const EdgeInsets.symmetric(horizontal: 7),
+                                    const EdgeInsets.symmetric(horizontal: 6),
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -204,14 +210,14 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                                         letterSpacing: -0.15,
                                       ),
                                     ),
-                                    const SizedBox(height: 4),
+                                    const SizedBox(height: 3),
                                     Text(
                                       displayItem.artist ?? 'Unknown artist',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(
-                                        color: AppColors.textMuted,
-                                        fontSize: 11,
+                                        color: AppColors.textSecondary,
+                                        fontSize: 10.8,
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
@@ -226,7 +232,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
                               icon: const Icon(
                                 Icons.skip_next_rounded,
                                 color: AppColors.textSecondary,
-                                size: 23,
+                                size: 22,
                               ),
                             ),
                             const _PlayPauseButton(),
@@ -258,28 +264,31 @@ class _PlayPauseButton extends ConsumerWidget {
       button: true,
       label: isPlaying ? 'Pause' : 'Play',
       child: InkResponse(
-        radius: 25,
+        radius: 24,
         onTap: () {
           HapticFeedback.mediumImpact();
           ref.read(audioPlayerProvider.notifier).togglePlay();
         },
         child: Container(
-          width: 42,
-          height: 42,
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: AppColors.accent,
+            gradient: AppColors.accentGradientDiag,
+            border: Border.all(
+              color: Colors.white.withValues(alpha: .18),
+            ),
             boxShadow: [
               BoxShadow(
-                color: AppColors.accent.withValues(alpha: 0.20),
-                blurRadius: 15,
+                color: AppColors.brandCyan.withValues(alpha: .22),
+                blurRadius: 14,
               ),
             ],
           ),
           child: Icon(
             isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
             color: Colors.white,
-            size: 25,
+            size: 24,
           ),
         ),
       ),
@@ -348,7 +357,7 @@ class _MiniSeekBarState extends ConsumerState<_MiniSeekBar> {
             setState(() => _isDragging = false);
           },
           child: SizedBox(
-            height: 10,
+            height: 8,
             child: Align(
               alignment: Alignment.bottomCenter,
               child: AnimatedContainer(
@@ -357,9 +366,9 @@ class _MiniSeekBarState extends ConsumerState<_MiniSeekBar> {
                 child: LinearProgressIndicator(
                   value: progress,
                   minHeight: _isDragging ? 4 : 3,
-                  backgroundColor: Colors.white.withValues(alpha: 0.10),
+                  backgroundColor: Colors.white.withValues(alpha: .10),
                   valueColor: const AlwaysStoppedAnimation<Color>(
-                    AppColors.accent,
+                    AppColors.brandCyan,
                   ),
                 ),
               ),
