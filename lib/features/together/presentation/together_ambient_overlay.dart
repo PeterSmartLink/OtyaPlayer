@@ -13,15 +13,27 @@ import '../domain/together_session.dart';
 /// Recent text/Moment messages briefly sit above the lower-left playback-safe
 /// region. Reactions float separately on the right. The layer stays compact,
 /// fades by itself, and expands into the full conversation only when tapped.
+/// The optional binding lets Anywhere reuse the exact same overlay while the
+/// Nearby runtime remains the backwards-compatible default.
 class TogetherAmbientOverlay extends StatefulWidget {
   const TogetherAmbientOverlay({
     super.key,
     required this.controlsVisible,
     required this.onOpenConversation,
+    this.listenable,
+    this.session,
+    this.messages,
+    this.localParticipantId,
+    this.active,
   });
 
   final bool controlsVisible;
   final VoidCallback onOpenConversation;
+  final Listenable? listenable;
+  final TogetherSession? Function()? session;
+  final List<TogetherMessage> Function()? messages;
+  final String? Function()? localParticipantId;
+  final bool Function()? active;
 
   @override
   State<TogetherAmbientOverlay> createState() =>
@@ -31,11 +43,26 @@ class TogetherAmbientOverlay extends StatefulWidget {
 class _TogetherAmbientOverlayState extends State<TogetherAmbientOverlay> {
   Timer? _expiryTicker;
 
+  Listenable get _listenable =>
+      widget.listenable ?? NearbyTogetherRuntime.instance;
+
+  bool get _active =>
+      widget.active?.call() ?? NearbyTogetherRuntime.instance.active;
+
+  TogetherSession? get _session =>
+      widget.session?.call() ?? NearbyTogetherRuntime.instance.state.session;
+
+  List<TogetherMessage> get _messages =>
+      widget.messages?.call() ?? NearbyTogetherRuntime.instance.state.messages;
+
+  String? get _localParticipantId => widget.localParticipantId?.call() ??
+      NearbyTogetherRuntime.instance.localParticipantId;
+
   @override
   void initState() {
     super.initState();
     _expiryTicker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && NearbyTogetherRuntime.instance.active) setState(() {});
+      if (mounted && _active) setState(() {});
     });
   }
 
@@ -47,17 +74,17 @@ class _TogetherAmbientOverlayState extends State<TogetherAmbientOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    final runtime = NearbyTogetherRuntime.instance;
     return AnimatedBuilder(
-      animation: runtime,
+      animation: _listenable,
       builder: (context, _) {
-        final session = runtime.state.session;
+        final session = _session;
         if (session == null || !session.isActive) {
           return const SizedBox.shrink();
         }
 
+        final localParticipantId = _localParticipantId;
         final now = DateTime.now().toUtc();
-        final recentMessages = runtime.state.messages
+        final recentMessages = _messages
             .where((message) =>
                 message.kind != TogetherMessageKind.system &&
                 message.kind != TogetherMessageKind.reaction &&
@@ -68,7 +95,7 @@ class _TogetherAmbientOverlayState extends State<TogetherAmbientOverlay> {
             ? recentMessages
             : recentMessages.sublist(recentMessages.length - 3);
 
-        final recentReactions = runtime.state.messages
+        final recentReactions = _messages
             .where((message) =>
                 message.isReaction &&
                 now.difference(message.createdAt).abs() <=
@@ -115,9 +142,13 @@ class _TogetherAmbientOverlayState extends State<TogetherAmbientOverlay> {
                             _AmbientMessageRow(
                               key: ValueKey(message.id),
                               message: message,
-                              sender: _senderName(session, message),
+                              sender: _senderName(
+                                session,
+                                message,
+                                localParticipantId,
+                              ),
                               own: message.senderParticipantId ==
-                                  runtime.localParticipantId,
+                                  localParticipantId,
                             ),
                         ],
                       ),
@@ -154,9 +185,13 @@ class _TogetherAmbientOverlayState extends State<TogetherAmbientOverlay> {
     );
   }
 
-  String _senderName(TogetherSession session, TogetherMessage message) {
+  String _senderName(
+    TogetherSession session,
+    TogetherMessage message,
+    String? localParticipantId,
+  ) {
     final id = message.senderParticipantId;
-    if (id == NearbyTogetherRuntime.instance.localParticipantId) return 'You';
+    if (id == localParticipantId) return 'You';
     final participant = session.participants
         .where((item) => item.id == id)
         .firstOrNull;
