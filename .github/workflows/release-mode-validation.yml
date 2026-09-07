@@ -1,6 +1,17 @@
 name: Validate Otya release mode
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'lib/**'
+      - 'android/**'
+      - 'test/**'
+      - 'scripts/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.github/workflows/release-mode-validation.yml'
   pull_request:
     branches:
       - main
