@@ -66,8 +66,8 @@ ACTUAL_DEBUGGABLE="$(tr -d '\r\n[:space:]' < "$EVIDENCE_DIR/debuggable.txt" | tr
 [ "$ACTUAL_VERSION_CODE" = "$EXPECTED_VERSION_CODE" ] || fail "versionCode mismatch: apk=$ACTUAL_VERSION_CODE pubspec=$EXPECTED_VERSION_CODE"
 [ "$ACTUAL_DEBUGGABLE" = 'false' ] || fail "release APK is debuggable"
 
-# MediaSession + foreground-service contract. Android may render the enum as
-# its symbolic value or its integer value in different SDK tool revisions.
+# MediaSession + foreground-service contract. Android SDK tool revisions can
+# render foregroundServiceType as either the symbolic enum or integer value.
 require_literal "$EVIDENCE_DIR/manifest.xml" 'com.ryanheise.audioservice.AudioService' 'audio_service foreground service'
 require_literal "$EVIDENCE_DIR/manifest.xml" 'com.ryanheise.audioservice.MediaButtonReceiver' 'media button receiver'
 require_regex "$EVIDENCE_DIR/manifest.xml" 'android:foregroundServiceType="(mediaPlayback|2)"' 'mediaPlayback foreground service type'
@@ -81,14 +81,21 @@ require_literal "$EVIDENCE_DIR/permissions.txt" 'android.permission.POST_NOTIFIC
 require_literal "$EVIDENCE_DIR/permissions.txt" 'android.permission.NEARBY_WIFI_DEVICES' 'Nearby Wi-Fi permission for Otya Send'
 require_literal "$EVIDENCE_DIR/permissions.txt" 'android.permission.CHANGE_WIFI_STATE' 'Wi-Fi state permission for Otya Send'
 
-# R8 must retain the native Android entry points that are loaded by class name.
+# R8 must retain Android entry points loaded by class name/reflection.
 require_literal "$EVIDENCE_DIR/dex-packages.txt" 'com.ryanheise.audioservice.AudioService' 'AudioService class after R8'
 require_literal "$EVIDENCE_DIR/dex-packages.txt" 'com.ryanheise.audioservice.MediaButtonReceiver' 'MediaButtonReceiver class after R8'
 require_literal "$EVIDENCE_DIR/dex-packages.txt" 'com.otyaplayer.app.MainActivity' 'Otya MainActivity after R8'
 require_literal "$EVIDENCE_DIR/dex-packages.txt" 'com.petersmartlink.otya_transfer_android.OtyaTransferAndroidPlugin' 'Otya offline-transfer plugin after R8'
 
-# media_kit must ship its ARM64 native playback engine in the publication APK.
-require_regex "$EVIDENCE_DIR/files.txt" '/lib/arm64-v8a/.*(mpv|media_kit).*\.so$' 'ARM64 media playback native library'
+# media_kit must ship a native playback engine for whichever production ABI
+# this APK contains. This works for the ARM64 direct APK and ARM32 R2 APK.
+if grep -Fq '/lib/arm64-v8a/' "$EVIDENCE_DIR/files.txt"; then
+  require_regex "$EVIDENCE_DIR/files.txt" '/lib/arm64-v8a/.*(mpv|media_kit).*\.so$' 'ARM64 media playback native library'
+elif grep -Fq '/lib/armeabi-v7a/' "$EVIDENCE_DIR/files.txt"; then
+  require_regex "$EVIDENCE_DIR/files.txt" '/lib/armeabi-v7a/.*(mpv|media_kit).*\.so$' 'ARM32 media playback native library'
+else
+  fail 'release APK contains neither supported ARM64 nor ARM32 native libraries'
+fi
 
 sha256sum "$APK" | tee "$EVIDENCE_DIR/sha256.txt"
 
