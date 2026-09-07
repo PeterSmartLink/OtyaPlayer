@@ -85,7 +85,7 @@ Future<TogetherEntryChoice?> showTogetherEntrySheet(BuildContext context) {
             'Anywhere uses the OTYA server only to connect the two phones. The movie itself is not uploaded to the room server.',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: AppColors.textTertiary,
+              color: AppColors.textMuted,
               fontSize: 11,
               height: 1.35,
             ),
