@@ -3,8 +3,9 @@ part of '../video_tab_screen.dart';
 /// Phone-first video row used by the main library and folder detail pages.
 ///
 /// A video is a visual item, but a two-column phone grid made thumbnails, names
-/// and folder context too small. This layout keeps a useful 16:9 preview while
-/// leaving enough horizontal space for title, folder, duration and file size.
+/// and folder context too small. The preview is now a clean true-16:9 surface:
+/// metadata stays beside it and Otya avoids covering the frame with a large
+/// centre play badge that made even good thumbnails feel cramped or blurry.
 class _VideoListCard extends StatelessWidget {
   const _VideoListCard({required this.item, required this.onTap});
 
@@ -28,68 +29,75 @@ class _VideoListCard extends StatelessWidget {
             child: Row(
               children: [
                 SizedBox(
-                  width: 132,
-                  height: 82,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        _VideoThumb(item: item, radius: 0),
-                        const DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [Colors.transparent, Color(0x7A000000)],
-                              begin: Alignment.center,
-                              end: Alignment.bottomCenter,
-                            ),
-                          ),
-                        ),
-                        Center(
-                          child: Container(
-                            width: 36,
-                            height: 36,
+                  width: 148,
+                  child: AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          _VideoThumb(item: item, radius: 0),
+                          const DecoratedBox(
                             decoration: BoxDecoration(
-                              color: AppColors.background.withValues(alpha: .66),
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: .72),
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.transparent,
+                                  Color(0x4A000000),
+                                ],
+                                begin: Alignment.center,
+                                end: Alignment.bottomCenter,
                               ),
                             ),
-                            child: const Icon(
-                              Icons.play_arrow_rounded,
-                              color: Colors.white,
-                              size: 24,
-                            ),
                           ),
-                        ),
-                        Positioned(
-                          right: 6,
-                          bottom: 6,
-                          child: _DurationBadge(label: item.formattedDuration),
-                        ),
-                        if (progress > .02 && progress < .98)
                           Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            child: LinearProgressIndicator(
-                              value: progress,
-                              minHeight: 3,
-                              backgroundColor: Colors.white24,
-                              valueColor: const AlwaysStoppedAnimation<Color>(
-                                AppColors.brandCyan,
+                            left: 7,
+                            top: 7,
+                            child: Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: AppColors.background.withValues(alpha: .54),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: .42),
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.play_arrow_rounded,
+                                color: Colors.white,
+                                size: 19,
                               ),
                             ),
                           ),
-                      ],
+                          Positioned(
+                            right: 6,
+                            bottom: 6,
+                            child: _DurationBadge(label: item.formattedDuration),
+                          ),
+                          if (progress > .02 && progress < .98)
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              child: LinearProgressIndicator(
+                                value: progress,
+                                minHeight: 3,
+                                backgroundColor: Colors.white24,
+                                valueColor: const AlwaysStoppedAnimation<Color>(
+                                  AppColors.brandCyan,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: SizedBox(
-                    height: 82,
+                    height: 84,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
