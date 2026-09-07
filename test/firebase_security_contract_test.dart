@@ -38,9 +38,10 @@ void main() {
     expect(httpClient, contains('uri.port != workerUri.port'));
   });
 
-  test('Google backend ID tokens prefer Web OAuth client id', () {
+  test('Google backend ID tokens use the shared Web OAuth client id', () {
     final google = read('lib/core/services/google_account_service.dart');
     final workflow = read('.github/workflows/test-apk.yml');
+    final releaseConfig = read('scripts/android-release-config.sh');
 
     expect(google, contains("String.fromEnvironment(\n    'GOOGLE_WEB_CLIENT_ID'"));
     expect(google, contains('serverClientId: _webClientId'));
@@ -48,11 +49,13 @@ void main() {
       google,
       contains('82776565585-obr8k53b8n6djsggissv8qne81cm3u5u.apps.googleusercontent.com'),
     );
+    expect(workflow, contains('source scripts/android-release-config.sh'));
+    expect(workflow, contains(r'"${OTYA_RELEASE_DART_DEFINES[@]}"'));
     expect(
-      workflow,
+      releaseConfig,
       contains('82776565585-obr8k53b8n6djsggissv8qne81cm3u5u.apps.googleusercontent.com'),
     );
-    expect(workflow, contains('--dart-define=GOOGLE_WEB_CLIENT_ID'));
+    expect(releaseConfig, contains('--dart-define=GOOGLE_WEB_CLIENT_ID='));
   });
 
   test('Firebase startup remains after runApp and service credentials stay out of app', () {
