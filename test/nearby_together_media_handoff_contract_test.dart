@@ -44,6 +44,35 @@ void main() {
     expect(runtime.contains('= Player('), isFalse);
   });
 
+  test('nearby critical messages are acknowledged and retried safely', () {
+    expect(channel.contains("'ack',"), isTrue);
+    expect(channel.contains('static const Set<String> reliableTypes'), isTrue);
+    expect(channel.contains("'hello',\n    'ready',\n    'media',"), isTrue);
+    expect(channel.contains("'chat',\n    'moment',\n    'reaction',"), isTrue);
+    expect(channel.contains('NearbyTogetherProtocol.requiresAck(type)'), isTrue);
+    expect(channel.contains('_scheduleRetry(socket, decoded.id, pending)'), isTrue);
+    expect(channel.contains('socket.add(pending.encoded)'), isTrue);
+    expect(channel.contains("{'message_id': messageId}"), isTrue);
+  });
+
+  test('nearby retries cannot duplicate user-visible messages', () {
+    expect(channel.contains('LinkedHashSet<String> _seenReliableIds'), isTrue);
+    expect(channel.contains('if (!_rememberReliableId(message.id)) return;'), isTrue);
+    expect(channel.contains('static const int _maxSeenReliableIds = 256'), isTrue);
+    expect(channel.contains('_seenReliableIds.remove(_seenReliableIds.first)'), isTrue);
+  });
+
+  test('real-time state and clock samples remain lossy instead of queueing stale data', () {
+    final reliableStart = channel.indexOf('static const Set<String> reliableTypes');
+    final allowedStart = channel.indexOf('static const Set<String> allowedTypes');
+    expect(reliableStart, greaterThanOrEqualTo(0));
+    expect(allowedStart, greaterThan(reliableStart));
+    final reliableBlock = channel.substring(reliableStart, allowedStart);
+    expect(reliableBlock.contains("'state'"), isFalse);
+    expect(reliableBlock.contains("'ping'"), isFalse);
+    expect(reliableBlock.contains("'pong'"), isFalse);
+  });
+
   test('video queue handoff preserves Together and gives host media control', () {
     expect(player.contains('await runtime.prepareHostNextMedia(item)'), isTrue);
     expect(player.contains('runtime.active && runtime.isGuest'), isTrue);
