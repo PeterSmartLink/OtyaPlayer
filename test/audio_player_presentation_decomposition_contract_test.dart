@@ -26,6 +26,41 @@ void main() {
     expect(view, isNot(contains('StreamSubscription')));
   });
 
+  test('idle audio provider cannot steal the system MediaSession', () {
+    final initStart = screen.indexOf('  void init() {');
+    final initEnd = screen.indexOf('  void _attachStreams()', initStart);
+    expect(initStart, greaterThanOrEqualTo(0));
+    expect(initEnd, greaterThan(initStart));
+    final initBlock = screen.substring(initStart, initEnd);
+    expect(
+      initBlock,
+      isNot(contains('AudioHandlerSingleton.instance.attachPlayer(_player)')),
+    );
+
+    final loadStart = screen.indexOf('  Future<bool> _loadCurrent(');
+    final loadEnd = screen.indexOf('  Future<void> load(', loadStart);
+    expect(loadStart, greaterThanOrEqualTo(0));
+    expect(loadEnd, greaterThan(loadStart));
+    final loadBlock = screen.substring(loadStart, loadEnd);
+    expect(
+      loadBlock,
+      contains("PlaybackCoordinator.instance.register(_player, 'audio')"),
+    );
+    expect(
+      loadBlock,
+      contains('AudioHandlerSingleton.instance.attachPlayer(_player)'),
+    );
+  });
+
+  test('notification metadata follows successful audio ownership', () {
+    final loadStart = screen.indexOf('  Future<void> load(');
+    final notification = screen.indexOf('      _updateNotification();', loadStart);
+    final loadedCheck = screen.indexOf('      if (!loaded ||', loadStart);
+    expect(loadStart, greaterThanOrEqualTo(0));
+    expect(loadedCheck, greaterThan(loadStart));
+    expect(notification, greaterThan(loadedCheck));
+  });
+
   test('now playing layout is presentation-only and delegated by the screen', () {
     expect(
       screen,
