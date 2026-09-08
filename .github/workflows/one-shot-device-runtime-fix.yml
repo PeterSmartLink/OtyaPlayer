@@ -32,77 +32,43 @@ jobs:
 
           bridge = Path('lib/features/together/data/anywhere_together_media_bridge.dart')
           s = bridge.read_text()
-          old_fields = """  final String? mimeType;
-            final int durationMs;
-
-            const AnywhereMediaDescriptor({
-              required this.fingerprint,
-              required this.byteLength,
-              required this.durationMs,
-              this.mimeType,
-            });
-          """
-          new_fields = """  final String? mimeType;
-            final int durationMs;
-            final bool streamAvailable;
-
-            const AnywhereMediaDescriptor({
-              required this.fingerprint,
-              required this.byteLength,
-              required this.durationMs,
-              this.mimeType,
-              this.streamAvailable = true,
-            });
-          """
-          if old_fields in s:
-              s = s.replace(old_fields, new_fields, 1)
-          elif 'final bool streamAvailable;' not in s:
-              raise SystemExit('descriptor field anchor changed')
-
-          old_json = """        'duration_ms': durationMs,
-                if (mimeType != null) 'mime_type': mimeType,
-              };
-          """
-          new_json = """        'duration_ms': durationMs,
-                'stream_available': streamAvailable,
-                if (mimeType != null) 'mime_type': mimeType,
-              };
-          """
-          if old_json in s:
-              s = s.replace(old_json, new_json, 1)
-          elif "'stream_available': streamAvailable" not in s:
-              raise SystemExit('descriptor json anchor changed')
-
-          old_parse = """    final mimeType = json['mime_type'];
-              if (fingerprint is! String ||
-          """
-          new_parse = """    final mimeType = json['mime_type'];
-              final streamAvailable = json['stream_available'];
-              if (fingerprint is! String ||
-          """
-          if old_parse in s:
-              s = s.replace(old_parse, new_parse, 1)
-          elif "json['stream_available']" not in s:
-              raise SystemExit('descriptor parse anchor changed')
-
-          old_return = """      durationMs: durationMs,
-                mimeType: mimeType is String && mimeType.trim().isNotEmpty
-                    ? mimeType.trim()
-                    : null,
-              );
-          """
-          new_return = """      durationMs: durationMs,
-                mimeType: mimeType is String && mimeType.trim().isNotEmpty
-                    ? mimeType.trim()
-                    : null,
-                streamAvailable: streamAvailable is bool ? streamAvailable : true,
-              );
-          """
-          if old_return in s:
-              s = s.replace(old_return, new_return, 1)
-          elif 'streamAvailable: streamAvailable is bool ? streamAvailable : true' not in s:
-              raise SystemExit('descriptor return anchor changed')
-
+          if 'final bool streamAvailable;' not in s:
+              s = s.replace(
+                  '  final int durationMs;\n',
+                  '  final int durationMs;\n  final bool streamAvailable;\n',
+                  1,
+              )
+              s = s.replace(
+                  '    this.mimeType,\n  });\n',
+                  '    this.mimeType,\n    this.streamAvailable = true,\n  });\n',
+                  1,
+              )
+          if "'stream_available': streamAvailable" not in s:
+              s = s.replace(
+                  "        'duration_ms': durationMs,\n",
+                  "        'duration_ms': durationMs,\n        'stream_available': streamAvailable,\n",
+                  1,
+              )
+          if "final streamAvailable = json['stream_available'];" not in s:
+              s = s.replace(
+                  "    final mimeType = json['mime_type'];\n",
+                  "    final mimeType = json['mime_type'];\n    final streamAvailable = json['stream_available'];\n",
+                  1,
+              )
+          if 'streamAvailable: streamAvailable is bool ? streamAvailable : true' not in s:
+              s = s.replace(
+                  "          : null,\n    );\n",
+                  "          : null,\n      streamAvailable: streamAvailable is bool ? streamAvailable : true,\n    );\n",
+                  1,
+              )
+          required = [
+              'final bool streamAvailable;',
+              "'stream_available': streamAvailable",
+              "final streamAvailable = json['stream_available'];",
+              'streamAvailable: streamAvailable is bool ? streamAvailable : true',
+          ]
+          if any(item not in s for item in required):
+              raise SystemExit('descriptor low-data patch incomplete')
           bridge.write_text(s)
           PY
 
