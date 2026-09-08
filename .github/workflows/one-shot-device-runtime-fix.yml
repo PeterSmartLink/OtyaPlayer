@@ -35,37 +35,40 @@ jobs:
               entry_anchor = "  Future<void> _showTogetherEntry() async {\n"
               if entry_anchor not in s:
                   raise SystemExit('Together entry function changed')
-              guard = """    if (!TogetherReleaseGate.isPubliclyEnabled) {
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Watch Together is still being tested and is not available in this build.',
-                    ),
-                    backgroundColor: AppColors.surface,
-                  ),
-                );
-              }
-              return;
-            }
+              guard_lines = [
+                  '    if (!TogetherReleaseGate.isPubliclyEnabled) {',
+                  '      if (mounted) {',
+                  '        ScaffoldMessenger.of(context).showSnackBar(',
+                  '          const SnackBar(',
+                  '            content: Text(',
+                  "              'Watch Together is still being tested and is not available in this build.',",
+                  '            ),',
+                  '            backgroundColor: AppColors.surface,',
+                  '          ),',
+                  '        );',
+                  '      }',
+                  '      return;',
+                  '    }',
+                  '',
+              ]
+              s = s.replace(entry_anchor, entry_anchor + '\n'.join(guard_lines) + '\n', 1)
 
-          """
-              s = s.replace(entry_anchor, entry_anchor + guard, 1)
-
-          gated_marker = '            if (TogetherReleaseGate.isPubliclyEnabled)\n'
-          if gated_marker not in s:
-              menu_anchor = """            ListTile(
-              leading: const Icon(
-                Icons.people_alt_rounded,
-          """
-              if menu_anchor not in s:
-                  raise SystemExit('Together menu entry changed')
-              replacement = """            if (TogetherReleaseGate.isPubliclyEnabled)
-              ListTile(
-                leading: const Icon(
-                  Icons.people_alt_rounded,
-          """
-              s = s.replace(menu_anchor, replacement, 1)
+          if 'if (TogetherReleaseGate.isPubliclyEnabled)' not in s:
+              icon_pos = s.find('Icons.people_alt_rounded')
+              if icon_pos < 0:
+                  raise SystemExit('Together icon changed')
+              line_start = s.rfind('\n', 0, icon_pos) + 1
+              list_start = s.rfind('\n', 0, line_start - 1) + 1
+              list_line_end = s.find('\n', list_start)
+              list_line = s[list_start:list_line_end]
+              if 'ListTile(' not in list_line:
+                  raise SystemExit('Together ListTile line changed')
+              indent = list_line[:len(list_line) - len(list_line.lstrip())]
+              replacement = (
+                  indent + 'if (TogetherReleaseGate.isPubliclyEnabled)\n' +
+                  indent + '  ' + list_line.strip()
+              )
+              s = s[:list_start] + replacement + s[list_line_end:]
 
           required = [
               "import '../../together/application/together_release_gate.dart';",
