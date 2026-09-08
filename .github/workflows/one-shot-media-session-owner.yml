@@ -24,59 +24,50 @@ jobs:
           p = Path('lib/features/player/presentation/audio_player_screen.dart')
           s = p.read_text()
 
-          old_init = """  void init() {
-            AudioHandlerSingleton.instance.attachPlayer(_player);
-            _attachStreams();
-          """
-          new_init = """  void init() {
-            _attachStreams();
-          """
-          if old_init not in s:
-              raise SystemExit('audio init ownership anchor changed')
-          s = s.replace(old_init, new_init, 1)
+          init_line = '    AudioHandlerSingleton.instance.attachPlayer(_player);\n'
+          init_pos = s.find(init_line, s.find('  void init() {'))
+          streams_pos = s.find('    _attachStreams();', s.find('  void init() {'))
+          if init_pos < 0 or streams_pos < 0 or init_pos > streams_pos:
+              raise SystemExit('audio init ownership line changed')
+          s = s[:init_pos] + s[init_pos + len(init_line):]
 
-          old_register = """      await PlaybackCoordinator.instance.register(_player, 'audio');
-              if (!isCurrent()) return false;
-              await AudioSessionService.instance.activate();
-          """
-          new_register = """      await PlaybackCoordinator.instance.register(_player, 'audio');
-              if (!isCurrent()) return false;
-              AudioHandlerSingleton.instance.attachPlayer(_player);
-              await AudioSessionService.instance.activate();
-          """
-          if old_register not in s:
-              raise SystemExit('audio load ownership anchor changed')
-          s = s.replace(old_register, new_register, 1)
+          register_line = "      await PlaybackCoordinator.instance.register(_player, 'audio');\n"
+          register_pos = s.find(register_line, s.find('Future<bool> _loadCurrent('))
+          if register_pos < 0:
+              raise SystemExit('audio load registration changed')
+          guard = '      if (!isCurrent()) return false;\n'
+          guard_pos = s.find(guard, register_pos + len(register_line))
+          if guard_pos < 0:
+              raise SystemExit('audio load current guard changed')
+          insert_pos = guard_pos + len(guard)
+          ownership_line = '      AudioHandlerSingleton.instance.attachPlayer(_player);\n'
+          if s.find(ownership_line, register_pos, insert_pos + len(ownership_line)) < 0:
+              s = s[:insert_pos] + ownership_line + s[insert_pos:]
 
-          old_early_notification = """    _container?.read(miniPlayerItemProvider.notifier).state = item;
-              _updateNotification();
+          mini_line = '    _container?.read(miniPlayerItemProvider.notifier).state = item;\n'
+          mini_pos = s.find(mini_line, s.find('Future<void> load('))
+          if mini_pos < 0:
+              raise SystemExit('mini player item assignment changed')
+          early_notification = '    _updateNotification();\n'
+          early_pos = s.find(early_notification, mini_pos + len(mini_line))
+          saved_pos = s.find('    final saved = OtyaDatabase.instance.getSeekPosition(item.id);', mini_pos)
+          if early_pos >= 0 and (saved_pos < 0 or early_pos < saved_pos):
+              s = s[:early_pos] + s[early_pos + len(early_notification):]
 
-              final saved = OtyaDatabase.instance.getSeekPosition(item.id);
-          """
-          new_early_notification = """    _container?.read(miniPlayerItemProvider.notifier).state = item;
+          record_line = '      OtyaDatabase.instance.recordPlay(item).ignore();\n'
+          record_pos = s.find(record_line, s.find('Future<void> load('))
+          if record_pos < 0:
+              raise SystemExit('record play line changed')
+          success_notification = '      _updateNotification();\n'
+          if s[max(0, record_pos - len(success_notification)):record_pos] != success_notification:
+              s = s[:record_pos] + success_notification + s[record_pos:]
 
-              final saved = OtyaDatabase.instance.getSeekPosition(item.id);
-          """
-          if old_early_notification not in s:
-              raise SystemExit('early notification anchor changed')
-          s = s.replace(old_early_notification, new_early_notification, 1)
-
-          old_success = """      OtyaDatabase.instance.recordPlay(item).ignore();
-          """
-          new_success = """      _updateNotification();
-              OtyaDatabase.instance.recordPlay(item).ignore();
-          """
-          if old_success not in s:
-              raise SystemExit('notification success anchor changed')
-          s = s.replace(old_success, new_success, 1)
-
-          required = [
-              "PlaybackCoordinator.instance.register(_player, 'audio')",
-              'AudioHandlerSingleton.instance.attachPlayer(_player);',
-              '_updateNotification();',
-          ]
-          if any(value not in s for value in required):
-              raise SystemExit('media-session ownership patch incomplete')
+          init_start = s.find('  void init() {')
+          init_end = s.find('  void _attachStreams()', init_start)
+          if 'AudioHandlerSingleton.instance.attachPlayer(_player)' in s[init_start:init_end]:
+              raise SystemExit('idle audio still owns MediaSession')
+          if ownership_line.strip() not in s[register_pos:register_pos + 500]:
+              raise SystemExit('active audio ownership missing')
 
           p.write_text(s)
           PY
