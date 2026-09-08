@@ -24,19 +24,18 @@ jobs:
           p = Path('lib/features/player/presentation/video_player_screen.dart')
           s = p.read_text()
 
-          import_anchor = "import '../../together/application/nearby_together_session.dart';\n"
           gate_import = "import '../../together/application/together_release_gate.dart';\n"
           if gate_import not in s:
+              import_anchor = "import '../../together/application/nearby_together_session.dart';\n"
               if import_anchor not in s:
                   raise SystemExit('Together import anchor changed')
               s = s.replace(import_anchor, import_anchor + gate_import, 1)
 
-          entry_anchor = """  Future<void> _showTogetherEntry() async {
-            final player = _player;
-          """
-          if "Watch Together is still being tested" not in s:
-              entry_replacement = """  Future<void> _showTogetherEntry() async {
-            if (!TogetherReleaseGate.isPubliclyEnabled) {
+          if 'Watch Together is still being tested' not in s:
+              entry_anchor = "  Future<void> _showTogetherEntry() async {\n"
+              if entry_anchor not in s:
+                  raise SystemExit('Together entry function changed')
+              guard = """    if (!TogetherReleaseGate.isPubliclyEnabled) {
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -50,25 +49,23 @@ jobs:
               return;
             }
 
-            final player = _player;
           """
-              if entry_anchor not in s:
-                  raise SystemExit('Together entry anchor changed')
-              s = s.replace(entry_anchor, entry_replacement, 1)
+              s = s.replace(entry_anchor, entry_anchor + guard, 1)
 
-          menu_anchor = """            ListTile(
+          gated_marker = '            if (TogetherReleaseGate.isPubliclyEnabled)\n'
+          if gated_marker not in s:
+              menu_anchor = """            ListTile(
               leading: const Icon(
                 Icons.people_alt_rounded,
           """
-          gated_menu = """            if (TogetherReleaseGate.isPubliclyEnabled)
+              if menu_anchor not in s:
+                  raise SystemExit('Together menu entry changed')
+              replacement = """            if (TogetherReleaseGate.isPubliclyEnabled)
               ListTile(
                 leading: const Icon(
                   Icons.people_alt_rounded,
           """
-          if gated_menu not in s:
-              if menu_anchor not in s:
-                  raise SystemExit('Together menu anchor changed')
-              s = s.replace(menu_anchor, gated_menu, 1)
+              s = s.replace(menu_anchor, replacement, 1)
 
           required = [
               "import '../../together/application/together_release_gate.dart';",
@@ -82,7 +79,6 @@ jobs:
           p.write_text(s)
           PY
 
-          dart format lib/features/player/presentation/video_player_screen.dart || true
           git config user.name 'PeterSmart Link'
           git config user.email 'petersmartlink@gmail.com'
           git add lib/features/player/presentation/video_player_screen.dart
