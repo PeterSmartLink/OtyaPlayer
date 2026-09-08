@@ -11,18 +11,21 @@ class AnywhereMediaDescriptor {
   final int byteLength;
   final String? mimeType;
   final int durationMs;
+  final bool streamAvailable;
 
   const AnywhereMediaDescriptor({
     required this.fingerprint,
     required this.byteLength,
     required this.durationMs,
     this.mimeType,
+    this.streamAvailable = true,
   });
 
   Map<String, dynamic> toJson() => {
         'fingerprint': fingerprint,
         'byte_length': byteLength,
         'duration_ms': durationMs,
+        'stream_available': streamAvailable,
         if (mimeType != null) 'mime_type': mimeType,
       };
 
@@ -33,6 +36,7 @@ class AnywhereMediaDescriptor {
     final byteLength = json['byte_length'];
     final durationMs = json['duration_ms'];
     final mimeType = json['mime_type'];
+    final streamAvailable = json['stream_available'];
     if (fingerprint is! String ||
         fingerprint.trim().isEmpty ||
         byteLength is! int ||
@@ -49,6 +53,7 @@ class AnywhereMediaDescriptor {
       mimeType: mimeType is String && mimeType.trim().isNotEmpty
           ? mimeType.trim()
           : null,
+      streamAvailable: streamAvailable is bool ? streamAvailable : true,
     );
   }
 }

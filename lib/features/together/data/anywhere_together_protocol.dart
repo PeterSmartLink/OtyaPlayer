@@ -14,6 +14,7 @@ class AnywhereTogetherPacket {
     'hello',
     'playback',
     'media',
+    'roster',
     'chat',
     'moment',
     'reaction',
