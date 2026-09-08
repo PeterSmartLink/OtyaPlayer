@@ -22,20 +22,11 @@ jobs:
           from pathlib import Path
           p = Path('lib/features/together/application/anywhere_together_runtime.dart')
           s = p.read_text()
-          old = """  Future<AnywherePlaybackPlan> joinGuest({
-            required String roomId,
-            required String inviteToken,
-            required Player player,
-          """
-          new = """  Future<AnywherePlaybackPlan> joinGuest({
-            required String roomId,
-            String inviteToken = '',
-            required Player player,
-          """
-          if old in s:
-              s = s.replace(old, new, 1)
-          elif "String inviteToken = ''" not in s:
-              raise SystemExit('joinGuest signature changed')
+          marker = "    required String inviteToken,\n"
+          if "    String inviteToken = '',\n" not in s:
+              if s.count(marker) != 1:
+                  raise SystemExit(f'expected one invite token parameter, found {s.count(marker)}')
+              s = s.replace(marker, "    String inviteToken = '',\n", 1)
           p.write_text(s)
           PY
           git config user.name 'PeterSmart Link'
