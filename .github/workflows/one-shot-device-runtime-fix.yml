@@ -14,200 +14,77 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Add group runtime lifecycle and data-saver guard
+      - name: Keep Watch Together behind the release gate
         shell: bash
         run: |
           set -euo pipefail
           python3 <<'PY'
           from pathlib import Path
 
-          p = Path('lib/features/together/application/anywhere_together_runtime.dart')
+          p = Path('lib/features/player/presentation/video_player_screen.dart')
           s = p.read_text()
 
-          if "../data/anywhere_together_group_host.dart" not in s:
-              s = s.replace(
-                  "import '../data/anywhere_together_media_bridge.dart';\n",
-                  "import '../data/anywhere_together_group_host.dart';\nimport '../data/anywhere_together_media_bridge.dart';\n",
-                  1,
-              )
-          if "import 'together_policy.dart';" not in s:
-              s = s.replace(
-                  "import 'together_session_controller.dart';\n",
-                  "import 'together_session_controller.dart';\nimport 'together_policy.dart';\n",
-                  1,
-              )
+          import_anchor = "import '../../together/application/nearby_together_session.dart';\n"
+          gate_import = "import '../../together/application/together_release_gate.dart';\n"
+          if gate_import not in s:
+              if import_anchor not in s:
+                  raise SystemExit('Together import anchor changed')
+              s = s.replace(import_anchor, import_anchor + gate_import, 1)
 
-          invite_end = """class AnywhereTogetherInvite {
-            final String roomId;
-            final String inviteToken;
-            final String guestUsername;
-            final DateTime? expiresAt;
-
-            const AnywhereTogetherInvite({
-              required this.roomId,
-              required this.inviteToken,
-              required this.guestUsername,
-              this.expiresAt,
-            });
-          }
+          entry_anchor = """  Future<void> _showTogetherEntry() async {
+            final player = _player;
           """
-          if 'class AnywhereTogetherGroupInvite' not in s:
-              group_model = """
-
-          class AnywhereTogetherGroupInvite {
-            final List<AnywhereTogetherInvite> invites;
-
-            const AnywhereTogetherGroupInvite({required this.invites});
-
-            int get participantCount => invites.length + 1;
-            List<String> get guestUsernames => invites
-                .map((invite) => invite.guestUsername)
-                .toList(growable: false);
-          }
-          """
-              if invite_end not in s:
-                  raise SystemExit('invite model anchor changed')
-              s = s.replace(invite_end, invite_end + group_model, 1)
-
-          if 'AnywhereTogetherGroupHost? _groupHost;' not in s:
-              s = s.replace(
-                  '  AnywhereTogetherPeer? _peer;\n',
-                  '  AnywhereTogetherPeer? _peer;\n  AnywhereTogetherGroupHost? _groupHost;\n',
-                  1,
-              )
-              s = s.replace(
-                  '  AnywhereTogetherInvite? _invite;\n',
-                  '  AnywhereTogetherInvite? _invite;\n  AnywhereTogetherGroupInvite? _groupInvite;\n',
-                  1,
-              )
-              s = s.replace(
-                  '  StreamSubscription<AnywhereTogetherPacket>? _packetSub;\n',
-                  '  StreamSubscription<AnywhereTogetherPacket>? _packetSub;\n  StreamSubscription<AnywhereTogetherGroupPacket>? _groupPacketSub;\n  StreamSubscription<AnywhereTogetherGroupPeerState>? _groupStateSub;\n  StreamSubscription<AnywhereTogetherGroupPeerError>? _groupErrorSub;\n',
-                  1,
-              )
-
-          if 'AnywhereTogetherGroupInvite? get groupInvite' not in s:
-              s = s.replace(
-                  '  AnywhereTogetherInvite? get invite => _invite;\n',
-                  '  AnywhereTogetherInvite? get invite => _invite;\n  AnywhereTogetherGroupInvite? get groupInvite => _groupInvite;\n',
-                  1,
-              )
-          s = s.replace(
-              '  AnywhereTogetherRole? get role => _peer?.role;\n',
-              '  AnywhereTogetherRole? get role => _groupHost?.isNotEmpty == true\n      ? AnywhereTogetherRole.host\n      : _peer?.role;\n',
-              1,
-          )
-          if 'bool get isGroupHost' not in s:
-              s = s.replace(
-                  '  bool get isGuest => role == AnywhereTogetherRole.guest;\n',
-                  '  bool get isGuest => role == AnywhereTogetherRole.guest;\n  bool get isGroupHost => _groupHost?.guestCount != null && (_groupHost?.guestCount ?? 0) > 1;\n',
-                  1,
-              )
-
-          stream_fallback = """      } else {
-                final mediaGuest = AnywhereTogetherMediaGuest(
-                  peer: peer,
-                  descriptor: descriptor,
+          if "Watch Together is still being tested" not in s:
+              entry_replacement = """  Future<void> _showTogetherEntry() async {
+            if (!TogetherReleaseGate.isPubliclyEnabled) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Watch Together is still being tested and is not available in this build.',
+                    ),
+                    backgroundColor: AppColors.surface,
+                  ),
                 );
-          """
-          if 'To save mobile data, group Together needs the same media on each phone.' not in s:
-              replacement = """      } else if (!descriptor.streamAvailable) {
-                throw StateError(
-                  'To save mobile data, group Together needs the same media on each phone. '
-                  'Use Send or Nearby first, then join the group again.',
-                );
-              } else {
-                final mediaGuest = AnywhereTogetherMediaGuest(
-                  peer: peer,
-                  descriptor: descriptor,
-                );
-          """
-              if stream_fallback not in s:
-                  raise SystemExit('guest media fallback anchor changed')
-              s = s.replace(stream_fallback, replacement, 1)
+              }
+              return;
+            }
 
-          stop_anchor = """    await _packetSub?.cancel();
-              await _peerStateSub?.cancel();
-              await _errorSub?.cancel();
+            final player = _player;
           """
-          if 'await _groupPacketSub?.cancel();' not in s:
-              replacement = """    await _packetSub?.cancel();
-              await _peerStateSub?.cancel();
-              await _errorSub?.cancel();
-              await _groupPacketSub?.cancel();
-              await _groupStateSub?.cancel();
-              await _groupErrorSub?.cancel();
-          """
-              if stop_anchor not in s:
-                  raise SystemExit('stop subscription anchor changed')
-              s = s.replace(stop_anchor, replacement, 1)
+              if entry_anchor not in s:
+                  raise SystemExit('Together entry anchor changed')
+              s = s.replace(entry_anchor, entry_replacement, 1)
 
-          null_anchor = """    _packetSub = null;
-              _peerStateSub = null;
-              _errorSub = null;
+          menu_anchor = """            ListTile(
+              leading: const Icon(
+                Icons.people_alt_rounded,
           """
-          if '_groupPacketSub = null;' not in s:
-              replacement = """    _packetSub = null;
-              _peerStateSub = null;
-              _errorSub = null;
-              _groupPacketSub = null;
-              _groupStateSub = null;
-              _groupErrorSub = null;
+          gated_menu = """            if (TogetherReleaseGate.isPubliclyEnabled)
+              ListTile(
+                leading: const Icon(
+                  Icons.people_alt_rounded,
           """
-              if null_anchor not in s:
-                  raise SystemExit('stop null anchor changed')
-              s = s.replace(null_anchor, replacement, 1)
-
-          peer_anchor = """    final mediaHost = _mediaHost;
-              final mediaGuest = _mediaGuest;
-              final peer = _peer;
-              _mediaHost = null;
-              _mediaGuest = null;
-              _peer = null;
-              await mediaHost?.stop();
-              await mediaGuest?.stop();
-              await peer?.dispose();
-          """
-          if 'final groupHost = _groupHost;' not in s:
-              replacement = """    final mediaHost = _mediaHost;
-              final mediaGuest = _mediaGuest;
-              final peer = _peer;
-              final groupHost = _groupHost;
-              _mediaHost = null;
-              _mediaGuest = null;
-              _peer = null;
-              _groupHost = null;
-              await mediaHost?.stop();
-              await mediaGuest?.stop();
-              await peer?.dispose();
-              await groupHost?.close();
-          """
-              if peer_anchor not in s:
-                  raise SystemExit('stop peer anchor changed')
-              s = s.replace(peer_anchor, replacement, 1)
-
-          if '_groupInvite = null;' not in s:
-              s = s.replace(
-                  '    _invite = null;\n',
-                  '    _invite = null;\n    _groupInvite = null;\n',
-                  1,
-              )
+          if gated_menu not in s:
+              if menu_anchor not in s:
+                  raise SystemExit('Together menu anchor changed')
+              s = s.replace(menu_anchor, gated_menu, 1)
 
           required = [
-              'class AnywhereTogetherGroupInvite',
-              'AnywhereTogetherGroupHost? _groupHost;',
-              'AnywhereTogetherGroupInvite? get groupInvite',
-              'bool get isGroupHost',
-              'descriptor.streamAvailable',
-              'await groupHost?.close();',
+              "import '../../together/application/together_release_gate.dart';",
+              'if (!TogetherReleaseGate.isPubliclyEnabled)',
+              'if (TogetherReleaseGate.isPubliclyEnabled)',
+              'Watch Together is still being tested',
           ]
           if any(item not in s for item in required):
-              raise SystemExit('group lifecycle patch incomplete')
+              raise SystemExit('Together release-gate patch incomplete')
+
           p.write_text(s)
           PY
 
+          dart format lib/features/player/presentation/video_player_screen.dart || true
           git config user.name 'PeterSmart Link'
           git config user.email 'petersmartlink@gmail.com'
-          git add lib/features/together/application/anywhere_together_runtime.dart
-          git commit -m 'feat(together): add group runtime lifecycle and data guard'
+          git add lib/features/player/presentation/video_player_screen.dart
+          git commit -m 'fix(together): hide Watch Together until release gate passes'
           git push origin HEAD:main
