@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -26,8 +27,43 @@ class MediaNotificationService {
   Uri? _lastArtworkUri;
   int _metadataGeneration = 0;
 
-  void Function()? onSkipPrevious;
-  void Function()? onSkipNext;
+  // Audio is the long-lived fallback owner. Temporary surfaces such as the
+  // video player register on top of it and automatically reveal the previous
+  // owner again when they leave. This prevents an old screen's dispose() from
+  // stealing lock-screen Previous/Next from the player that replaced it.
+  VoidCallback? _legacySkipPrevious;
+  VoidCallback? _legacySkipNext;
+  final LinkedHashMap<Object, _TransportCallbacks> _transportOwners =
+      LinkedHashMap<Object, _TransportCallbacks>.identity();
+
+  VoidCallback? get onSkipPrevious => _transportOwners.isNotEmpty
+      ? _transportOwners.values.last.onSkipPrevious
+      : _legacySkipPrevious;
+
+  set onSkipPrevious(VoidCallback? callback) =>
+      _legacySkipPrevious = callback;
+
+  VoidCallback? get onSkipNext => _transportOwners.isNotEmpty
+      ? _transportOwners.values.last.onSkipNext
+      : _legacySkipNext;
+
+  set onSkipNext(VoidCallback? callback) => _legacySkipNext = callback;
+
+  void registerTransportCallbacks(
+    Object owner, {
+    required VoidCallback onSkipPrevious,
+    required VoidCallback onSkipNext,
+  }) {
+    _transportOwners.remove(owner);
+    _transportOwners[owner] = _TransportCallbacks(
+      onSkipPrevious: onSkipPrevious,
+      onSkipNext: onSkipNext,
+    );
+  }
+
+  void unregisterTransportCallbacks(Object owner) {
+    _transportOwners.remove(owner);
+  }
 
   Future<void> init() async {
     if (_initialized) return;
@@ -85,7 +121,8 @@ class MediaNotificationService {
     File? part;
     try {
       final request = http.Request('GET', uri);
-      final response = await client.send(request).timeout(const Duration(seconds: 6));
+      final response =
+          await client.send(request).timeout(const Duration(seconds: 6));
       if (response.statusCode != HttpStatus.ok) return null;
 
       final declaredLength = response.contentLength;
@@ -301,6 +338,16 @@ class MediaNotificationService {
     _lastArtworkUri = null;
     AudioHandlerSingleton.instance.clearMediaItem();
   }
+}
+
+class _TransportCallbacks {
+  final VoidCallback onSkipPrevious;
+  final VoidCallback onSkipNext;
+
+  const _TransportCallbacks({
+    required this.onSkipPrevious,
+    required this.onSkipNext,
+  });
 }
 
 class _ArtworkTooLargeException implements Exception {
