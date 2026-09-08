@@ -14,61 +14,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Patch Together invitation client
+      - name: Allow in-app Together join without copied token
         shell: bash
         run: |
           set -euo pipefail
           python3 <<'PY'
           from pathlib import Path
-          p = Path('lib/features/together/data/together_control_client.dart')
+          p = Path('lib/features/together/application/anywhere_together_runtime.dart')
           s = p.read_text()
-          rooms = "  Uri get _roomsUri => Uri.parse('${Environment.workerUrl}/api/together/rooms');\n"
-          if '_invitesUri' not in s:
-              if rooms not in s:
-                  raise SystemExit('rooms uri anchor changed')
-              s = s.replace(rooms, rooms + "  Uri get _invitesUri => Uri.parse('${Environment.workerUrl}/api/together/invites');\n", 1)
-          s = s.replace("    required String inviteToken,\n", "    String inviteToken = '',\n", 1)
-          s = s.replace(
-              "        body: jsonEncode({'invite_token': inviteToken}),\n",
-              "        body: jsonEncode(inviteToken.trim().isEmpty ? <String, Object?>{} : {'invite_token': inviteToken}),\n",
-              1,
-          )
-          if 'pendingInvites()' not in s:
-              anchor = "  Future<TogetherControlResult<TogetherRemoteRoom>> getRoom(String roomId) async {\n"
-              if anchor not in s:
-                  raise SystemExit('getRoom anchor changed')
-              method = """  Future<TogetherControlResult<List<TogetherRemoteRoom>>> pendingInvites() async {
-            final auth = await _authorization();
-            if (auth == null) return _signedOut();
-            try {
-              final response = await AppHttpClient.instance.client.get(
-                _invitesUri,
-                headers: {'Authorization': auth},
-              ).timeout(_timeout);
-              final data = _decode(response.body);
-              if (response.statusCode != 200 || data?['invites'] is! List) {
-                return _error(data, 'Could not load Together invitations.');
-              }
-              final invites = (data!['invites'] as List)
-                  .whereType<Map>()
-                  .map((item) => TogetherRemoteRoom.fromJson(Map<String, dynamic>.from(item)))
-                  .where((room) => room.roomId.isNotEmpty)
-                  .toList(growable: false);
-              return TogetherControlResult(value: invites);
-            } catch (_) {
-              return _networkError();
-            }
-          }
-
+          old = """  Future<AnywherePlaybackPlan> joinGuest({
+            required String roomId,
+            required String inviteToken,
+            required Player player,
           """
-              s = s.replace(anchor, method + anchor, 1)
-          required = ['_invitesUri', 'pendingInvites()', "inviteToken.trim().isEmpty ? <String, Object?>{}"]
-          if any(item not in s for item in required):
-              raise SystemExit('client patch incomplete')
+          new = """  Future<AnywherePlaybackPlan> joinGuest({
+            required String roomId,
+            String inviteToken = '',
+            required Player player,
+          """
+          if old in s:
+              s = s.replace(old, new, 1)
+          elif "String inviteToken = ''" not in s:
+              raise SystemExit('joinGuest signature changed')
           p.write_text(s)
           PY
           git config user.name 'PeterSmart Link'
           git config user.email 'petersmartlink@gmail.com'
-          git add lib/features/together/data/together_control_client.dart
-          git commit -m 'feat(together): load in-app invitations'
+          git add lib/features/together/application/anywhere_together_runtime.dart
+          git commit -m 'feat(together): join pending invitation without link'
           git push origin HEAD:main
