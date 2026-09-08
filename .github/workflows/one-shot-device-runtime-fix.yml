@@ -14,23 +14,235 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Allow in-app Together join without copied token
+      - name: Show Together invitations inside OTYA
         shell: bash
         run: |
           set -euo pipefail
           python3 <<'PY'
           from pathlib import Path
-          p = Path('lib/features/together/application/anywhere_together_runtime.dart')
+          p = Path('lib/features/together/presentation/anywhere_together_sheet.dart')
           s = p.read_text()
-          marker = "    required String inviteToken,\n"
-          if "    String inviteToken = '',\n" not in s:
-              if s.count(marker) != 1:
-                  raise SystemExit(f'expected one invite token parameter, found {s.count(marker)}')
-              s = s.replace(marker, "    String inviteToken = '',\n", 1)
+
+          import_anchor = "import '../application/anywhere_together_runtime.dart';\n"
+          if "../data/together_control_client.dart" not in s:
+              if import_anchor not in s:
+                  raise SystemExit('runtime import anchor changed')
+              s = s.replace(import_anchor, import_anchor + "import '../data/together_control_client.dart';\n", 1)
+
+          old_state = """class _AnywhereJoinSheetState extends State<_AnywhereJoinSheet> {
+            final _inviteController = TextEditingController();
+            bool _working = false;
+            String? _error;
+
+            AnywhereTogetherRuntime get _runtime => AnywhereTogetherRuntime.instance;
+
+            @override
+            void dispose() {
+          """
+          new_state = """class _AnywhereJoinSheetState extends State<_AnywhereJoinSheet> {
+            final _inviteController = TextEditingController();
+            bool _working = false;
+            bool _loadingInvites = true;
+            List<TogetherRemoteRoom> _invites = const [];
+            String? _error;
+
+            AnywhereTogetherRuntime get _runtime => AnywhereTogetherRuntime.instance;
+
+            @override
+            void initState() {
+              super.initState();
+              _loadInvites();
+            }
+
+            Future<void> _loadInvites() async {
+              setState(() => _loadingInvites = true);
+              final result = await TogetherControlClient.instance.pendingInvites();
+              if (!mounted) return;
+              setState(() {
+                _loadingInvites = false;
+                _invites = result.value ?? const [];
+                if (!result.ok && result.code != 'SIGN_IN_REQUIRED') {
+                  _error = result.error;
+                }
+              });
+            }
+
+            Future<void> _joinPending(TogetherRemoteRoom room) async {
+              if (_working) return;
+              setState(() {
+                _working = true;
+                _error = null;
+              });
+              try {
+                final plan = await _runtime.joinGuest(
+                  roomId: room.roomId,
+                  player: widget.player,
+                  candidateMediaItem: widget.currentMediaItem,
+                );
+                if (!mounted) return;
+                Navigator.of(context).pop(plan);
+              } catch (_) {
+                if (!mounted) return;
+                setState(() {
+                  _working = false;
+                  _error = _runtime.lastError ?? 'OTYA could not join this private room.';
+                });
+              }
+            }
+
+            Widget _pendingInvitesSection() {
+              if (_loadingInvites) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 14),
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                );
+              }
+              if (_invites.isEmpty) {
+                return Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceElevated.withValues(alpha: .5),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: AppColors.borderSubtle),
+                  ),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'No pending invitations. Your friends only need your @username to invite you.',
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12.5,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: _working ? null : _loadInvites,
+                        tooltip: 'Refresh invitations',
+                        icon: const Icon(Icons.refresh_rounded),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              return Column(
+                children: [
+                  for (final room in _invites)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceElevated.withValues(alpha: .72),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: AppColors.borderSubtle),
+                      ),
+                      child: Row(
+                        children: [
+                          const CircleAvatar(
+                            backgroundColor: AppColors.surfaceHighlight,
+                            child: Icon(Icons.person_rounded, color: AppColors.brandCyan),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  room.host.displayName?.trim().isNotEmpty == true
+                                      ? room.host.displayName!
+                                      : room.host.handle,
+                                  style: const TextStyle(
+                                    color: AppColors.textPrimary,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${room.host.handle} invited you to watch Together',
+                                  style: const TextStyle(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          FilledButton(
+                            onPressed: _working ? null : () => _joinPending(room),
+                            child: const Text('Join'),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              );
+            }
+
+            @override
+            void dispose() {
+          """
+          if old_state in s:
+              s = s.replace(old_state, new_state, 1)
+          elif 'Widget _pendingInvitesSection()' not in s:
+              raise SystemExit('join sheet state anchor changed')
+
+          s = s.replace("icon: Icons.link_rounded,", "icon: Icons.groups_rounded,", 1)
+          s = s.replace(
+              "subtitle: 'Paste the private invite sent by your friend. OTYA will reuse your local copy when it matches.',",
+              "subtitle: 'Invitations sent to your OTYA username appear here. Matching local media is reused to save mobile data.',",
+              1,
+          )
+
+          field_anchor = """          const SizedBox(height: 18),
+            TextField(
+              controller: _inviteController,
+          """
+          if "_pendingInvitesSection()," not in s:
+              replacement = """          const SizedBox(height: 18),
+            _pendingInvitesSection(),
+            const SizedBox(height: 16),
+            const Text(
+              'Older invite link',
+              style: TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _inviteController,
+          """
+              if field_anchor not in s:
+                  raise SystemExit('invite field anchor changed')
+              s = s.replace(field_anchor, replacement, 1)
+
+          s = s.replace("labelText: 'Private invite',", "labelText: 'Fallback private invite',", 1)
+          s = s.replace("label: Text(_working ? 'Connecting phones…' : 'Join private room'),", "label: Text(_working ? 'Connecting phones…' : 'Join from link'),", 1)
+          s = s.replace(
+              "subtitle: 'Send this private invite only to @${invite.guestUsername}. Keep OTYA open while they join.',",
+              "subtitle: 'OTYA invited @${invite.guestUsername} inside the app. They can open Together and tap Join. Keep OTYA open while they connect.',",
+              1,
+          )
+          s = s.replace("label: const Text('Copy private invite'),", "label: const Text('Copy fallback invite'),", 1)
+
+          required = [
+              'TogetherControlClient.instance.pendingInvites()',
+              '_joinPending(TogetherRemoteRoom room)',
+              "child: const Text('Join')",
+              "'Older invite link'",
+              "labelText: 'Fallback private invite'",
+          ]
+          if any(item not in s for item in required):
+              raise SystemExit('join UI patch incomplete')
           p.write_text(s)
           PY
           git config user.name 'PeterSmart Link'
           git config user.email 'petersmartlink@gmail.com'
-          git add lib/features/together/application/anywhere_together_runtime.dart
-          git commit -m 'feat(together): join pending invitation without link'
+          git add lib/features/together/presentation/anywhere_together_sheet.dart
+          git commit -m 'feat(together): show private invitations in app'
           git push origin HEAD:main
