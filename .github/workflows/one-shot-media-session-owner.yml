@@ -1,0 +1,88 @@
+name: One-shot active media session ownership fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/one-shot-media-session-owner.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Make music claim MediaSession only during real playback
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          p = Path('lib/features/player/presentation/audio_player_screen.dart')
+          s = p.read_text()
+
+          old_init = """  void init() {
+            AudioHandlerSingleton.instance.attachPlayer(_player);
+            _attachStreams();
+          """
+          new_init = """  void init() {
+            _attachStreams();
+          """
+          if old_init not in s:
+              raise SystemExit('audio init ownership anchor changed')
+          s = s.replace(old_init, new_init, 1)
+
+          old_register = """      await PlaybackCoordinator.instance.register(_player, 'audio');
+              if (!isCurrent()) return false;
+              await AudioSessionService.instance.activate();
+          """
+          new_register = """      await PlaybackCoordinator.instance.register(_player, 'audio');
+              if (!isCurrent()) return false;
+              AudioHandlerSingleton.instance.attachPlayer(_player);
+              await AudioSessionService.instance.activate();
+          """
+          if old_register not in s:
+              raise SystemExit('audio load ownership anchor changed')
+          s = s.replace(old_register, new_register, 1)
+
+          old_early_notification = """    _container?.read(miniPlayerItemProvider.notifier).state = item;
+              _updateNotification();
+
+              final saved = OtyaDatabase.instance.getSeekPosition(item.id);
+          """
+          new_early_notification = """    _container?.read(miniPlayerItemProvider.notifier).state = item;
+
+              final saved = OtyaDatabase.instance.getSeekPosition(item.id);
+          """
+          if old_early_notification not in s:
+              raise SystemExit('early notification anchor changed')
+          s = s.replace(old_early_notification, new_early_notification, 1)
+
+          old_success = """      OtyaDatabase.instance.recordPlay(item).ignore();
+          """
+          new_success = """      _updateNotification();
+              OtyaDatabase.instance.recordPlay(item).ignore();
+          """
+          if old_success not in s:
+              raise SystemExit('notification success anchor changed')
+          s = s.replace(old_success, new_success, 1)
+
+          required = [
+              "PlaybackCoordinator.instance.register(_player, 'audio')",
+              'AudioHandlerSingleton.instance.attachPlayer(_player);',
+              '_updateNotification();',
+          ]
+          if any(value not in s for value in required):
+              raise SystemExit('media-session ownership patch incomplete')
+
+          p.write_text(s)
+          PY
+
+          git config user.name 'PeterSmart Link'
+          git config user.email 'petersmartlink@gmail.com'
+          git add lib/features/player/presentation/audio_player_screen.dart
+          git commit -m 'fix(playback): claim MediaSession only for active audio'
+          git push origin HEAD:main
