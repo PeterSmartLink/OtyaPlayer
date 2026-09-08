@@ -133,6 +133,7 @@ class TogetherControlClient {
   static const _allowedSignalTypes = {'offer', 'answer', 'ice', 'bye'};
 
   Uri get _roomsUri => Uri.parse('${Environment.workerUrl}/api/together/rooms');
+  Uri get _invitesUri => Uri.parse('${Environment.workerUrl}/api/together/invites');
 
   Future<TogetherControlResult<TogetherRoomCreation>> createRoom(
     String inviteUsername,
@@ -183,7 +184,7 @@ class TogetherControlClient {
 
   Future<TogetherControlResult<TogetherRemoteRoom>> joinRoom({
     required String roomId,
-    required String inviteToken,
+    String inviteToken = '',
   }) async {
     final auth = await _authorization();
     if (auth == null) return _signedOut();
@@ -195,7 +196,7 @@ class TogetherControlClient {
           'Authorization': auth,
           'Content-Type': 'application/json',
         },
-        body: jsonEncode({'invite_token': inviteToken}),
+        body: jsonEncode(inviteToken.trim().isEmpty ? <String, Object?>{} : {'invite_token': inviteToken}),
       ).timeout(_timeout);
       final data = _decode(response.body);
       if (response.statusCode != 200 || data?['room'] is! Map) {
@@ -210,6 +211,29 @@ class TogetherControlClient {
       return _networkError();
     }
   }
+
+  Future<TogetherControlResult<List<TogetherRemoteRoom>>> pendingInvites() async {
+  final auth = await _authorization();
+  if (auth == null) return _signedOut();
+  try {
+    final response = await AppHttpClient.instance.client.get(
+      _invitesUri,
+      headers: {'Authorization': auth},
+    ).timeout(_timeout);
+    final data = _decode(response.body);
+    if (response.statusCode != 200 || data?['invites'] is! List) {
+      return _error(data, 'Could not load Together invitations.');
+    }
+    final invites = (data!['invites'] as List)
+        .whereType<Map>()
+        .map((item) => TogetherRemoteRoom.fromJson(Map<String, dynamic>.from(item)))
+        .where((room) => room.roomId.isNotEmpty)
+        .toList(growable: false);
+    return TogetherControlResult(value: invites);
+  } catch (_) {
+    return _networkError();
+  }
+}
 
   Future<TogetherControlResult<TogetherRemoteRoom>> getRoom(String roomId) async {
     final auth = await _authorization();
