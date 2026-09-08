@@ -5,8 +5,19 @@ import '../domain/together_session.dart';
 /// These rules keep Together feeling like part of the media player instead of
 /// turning OTYA into a second messaging/social app.
 abstract final class TogetherPolicy {
-  /// V1 is deliberately private and one-to-one for reliability.
-  static const int maxParticipantsV1 = 2;
+  /// Keep the first group experience intentionally small: one host plus up to
+  /// three friends. This gives OTYA a real shared-room experience without
+  /// turning a phone into a high-bandwidth broadcast server.
+  static const int maxParticipantsV1 = 4;
+  static const int maxInvitedFriendsV1 = maxParticipantsV1 - 1;
+
+  /// Group data policy: matching local copies are always preferred. Nearby
+  /// Together remains LAN/local-first. Anywhere should never fan the full media
+  /// file out to every guest by default; peer streaming is a fallback only for
+  /// participants that do not already have the matching media.
+  static const bool preferMatchingLocalMedia = true;
+  static const bool nearbyPrefersLocalNetwork = true;
+  static const bool remoteMediaStreamingIsFallback = true;
 
   /// Keep the ephemeral transcript bounded even during very long rooms or a
   /// noisy peer. The newest messages are retained; closing the room still
