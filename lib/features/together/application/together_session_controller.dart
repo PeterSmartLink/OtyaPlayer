@@ -50,7 +50,10 @@ class TogetherSessionController {
       throw StateError('A Together room needs at least the host.');
     }
     if (session.participants.length > TogetherPolicy.maxParticipantsV1) {
-      throw StateError('Together v1 supports one host and one guest.');
+      throw StateError(
+        'Together supports one host and up to '
+        '${TogetherPolicy.maxInvitedFriendsV1} friends.',
+      );
     }
     if (!session.participants.any(
       (participant) => participant.id == session.hostParticipantId,
@@ -132,7 +135,7 @@ class TogetherSessionController {
       updated[existingIndex] = participant;
     } else {
       if (updated.length >= TogetherPolicy.maxParticipantsV1) {
-        throw StateError('Together v1 room is full.');
+        throw StateError('Together room is full.');
       }
       updated.add(participant);
     }
