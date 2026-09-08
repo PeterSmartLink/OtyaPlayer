@@ -57,8 +57,9 @@ jobs:
               icon_pos = s.find('Icons.people_alt_rounded')
               if icon_pos < 0:
                   raise SystemExit('Together icon changed')
-              line_start = s.rfind('\n', 0, icon_pos) + 1
-              list_start = s.rfind('\n', 0, line_start - 1) + 1
+              icon_line = s.rfind('\n', 0, icon_pos) + 1
+              leading_line = s.rfind('\n', 0, icon_line - 1) + 1
+              list_start = s.rfind('\n', 0, leading_line - 1) + 1
               list_line_end = s.find('\n', list_start)
               list_line = s[list_start:list_line_end]
               if 'ListTile(' not in list_line:
