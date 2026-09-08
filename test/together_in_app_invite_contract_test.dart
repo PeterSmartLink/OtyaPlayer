@@ -23,17 +23,17 @@ void main() {
   test('pending invitation joins without copying the secret link', () {
     expect(
       client,
-      contains("inviteToken.trim().isEmpty ? <String, Object?>{}"),
+      contains('inviteToken.trim().isEmpty ? <String, Object?>{}'),
     );
-    expect(runtime, contains("String inviteToken = ''"));
+    expect(runtime, contains('String inviteToken = \'\''));
     expect(sheet, contains('_joinPending(TogetherRemoteRoom room)'));
-    expect(sheet, contains("child: const Text('Join')"));
+    expect(sheet, contains('child: const Text(\'Join\')'));
   });
 
   test('legacy link remains a secondary fallback', () {
-    expect(sheet, contains("'Older invite link'"));
-    expect(sheet, contains("labelText: 'Fallback private invite'"));
-    expect(sheet, contains("'Join from link'"));
+    expect(sheet, contains('\'Older invite link\''));
+    expect(sheet, contains('labelText: \'Fallback private invite\''));
+    expect(sheet, contains('\'Join from link\''));
   });
 
   test('join surface explains local-copy data saving', () {
