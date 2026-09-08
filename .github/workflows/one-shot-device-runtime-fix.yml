@@ -177,13 +177,10 @@ jobs:
             });
           }
           """)
-
-          Path('.github/workflows/one-shot-device-runtime-fix.yml').unlink()
           PY
 
-          dart format lib/features/player/presentation/video_player_screen.dart test/video_system_media_session_contract_test.dart
           git config user.name 'PeterSmart Link'
           git config user.email 'petersmartlink@gmail.com'
-          git add lib/features/player/presentation/video_player_screen.dart test/video_system_media_session_contract_test.dart .github/workflows/one-shot-device-runtime-fix.yml
+          git add lib/features/player/presentation/video_player_screen.dart test/video_system_media_session_contract_test.dart
           git commit -m 'fix(player): connect video to system media controls'
           git push origin HEAD:main
