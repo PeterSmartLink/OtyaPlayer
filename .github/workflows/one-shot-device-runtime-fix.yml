@@ -14,66 +14,200 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Add low-data group media descriptor and roster packet
+      - name: Add group runtime lifecycle and data-saver guard
         shell: bash
         run: |
           set -euo pipefail
           python3 <<'PY'
           from pathlib import Path
 
-          protocol = Path('lib/features/together/data/anywhere_together_protocol.dart')
-          ps = protocol.read_text()
-          if "    'roster',\n" not in ps:
-              marker = "    'media',\n"
-              if marker not in ps:
-                  raise SystemExit('protocol media type anchor changed')
-              ps = ps.replace(marker, marker + "    'roster',\n", 1)
-          protocol.write_text(ps)
+          p = Path('lib/features/together/application/anywhere_together_runtime.dart')
+          s = p.read_text()
 
-          bridge = Path('lib/features/together/data/anywhere_together_media_bridge.dart')
-          s = bridge.read_text()
-          if 'final bool streamAvailable;' not in s:
+          if "../data/anywhere_together_group_host.dart" not in s:
               s = s.replace(
-                  '  final int durationMs;\n',
-                  '  final int durationMs;\n  final bool streamAvailable;\n',
+                  "import '../data/anywhere_together_media_bridge.dart';\n",
+                  "import '../data/anywhere_together_group_host.dart';\nimport '../data/anywhere_together_media_bridge.dart';\n",
+                  1,
+              )
+          if "import 'together_policy.dart';" not in s:
+              s = s.replace(
+                  "import 'together_session_controller.dart';\n",
+                  "import 'together_session_controller.dart';\nimport 'together_policy.dart';\n",
+                  1,
+              )
+
+          invite_end = """class AnywhereTogetherInvite {
+            final String roomId;
+            final String inviteToken;
+            final String guestUsername;
+            final DateTime? expiresAt;
+
+            const AnywhereTogetherInvite({
+              required this.roomId,
+              required this.inviteToken,
+              required this.guestUsername,
+              this.expiresAt,
+            });
+          }
+          """
+          if 'class AnywhereTogetherGroupInvite' not in s:
+              group_model = """
+
+          class AnywhereTogetherGroupInvite {
+            final List<AnywhereTogetherInvite> invites;
+
+            const AnywhereTogetherGroupInvite({required this.invites});
+
+            int get participantCount => invites.length + 1;
+            List<String> get guestUsernames => invites
+                .map((invite) => invite.guestUsername)
+                .toList(growable: false);
+          }
+          """
+              if invite_end not in s:
+                  raise SystemExit('invite model anchor changed')
+              s = s.replace(invite_end, invite_end + group_model, 1)
+
+          if 'AnywhereTogetherGroupHost? _groupHost;' not in s:
+              s = s.replace(
+                  '  AnywhereTogetherPeer? _peer;\n',
+                  '  AnywhereTogetherPeer? _peer;\n  AnywhereTogetherGroupHost? _groupHost;\n',
                   1,
               )
               s = s.replace(
-                  '    this.mimeType,\n  });\n',
-                  '    this.mimeType,\n    this.streamAvailable = true,\n  });\n',
+                  '  AnywhereTogetherInvite? _invite;\n',
+                  '  AnywhereTogetherInvite? _invite;\n  AnywhereTogetherGroupInvite? _groupInvite;\n',
                   1,
               )
-          if "'stream_available': streamAvailable" not in s:
               s = s.replace(
-                  "        'duration_ms': durationMs,\n",
-                  "        'duration_ms': durationMs,\n        'stream_available': streamAvailable,\n",
+                  '  StreamSubscription<AnywhereTogetherPacket>? _packetSub;\n',
+                  '  StreamSubscription<AnywhereTogetherPacket>? _packetSub;\n  StreamSubscription<AnywhereTogetherGroupPacket>? _groupPacketSub;\n  StreamSubscription<AnywhereTogetherGroupPeerState>? _groupStateSub;\n  StreamSubscription<AnywhereTogetherGroupPeerError>? _groupErrorSub;\n',
                   1,
               )
-          if "final streamAvailable = json['stream_available'];" not in s:
+
+          if 'AnywhereTogetherGroupInvite? get groupInvite' not in s:
               s = s.replace(
-                  "    final mimeType = json['mime_type'];\n",
-                  "    final mimeType = json['mime_type'];\n    final streamAvailable = json['stream_available'];\n",
+                  '  AnywhereTogetherInvite? get invite => _invite;\n',
+                  '  AnywhereTogetherInvite? get invite => _invite;\n  AnywhereTogetherGroupInvite? get groupInvite => _groupInvite;\n',
                   1,
               )
-          if 'streamAvailable: streamAvailable is bool ? streamAvailable : true' not in s:
+          s = s.replace(
+              '  AnywhereTogetherRole? get role => _peer?.role;\n',
+              '  AnywhereTogetherRole? get role => _groupHost?.isNotEmpty == true\n      ? AnywhereTogetherRole.host\n      : _peer?.role;\n',
+              1,
+          )
+          if 'bool get isGroupHost' not in s:
               s = s.replace(
-                  "          : null,\n    );\n",
-                  "          : null,\n      streamAvailable: streamAvailable is bool ? streamAvailable : true,\n    );\n",
+                  '  bool get isGuest => role == AnywhereTogetherRole.guest;\n',
+                  '  bool get isGuest => role == AnywhereTogetherRole.guest;\n  bool get isGroupHost => _groupHost?.guestCount != null && (_groupHost?.guestCount ?? 0) > 1;\n',
                   1,
               )
+
+          stream_fallback = """      } else {
+                final mediaGuest = AnywhereTogetherMediaGuest(
+                  peer: peer,
+                  descriptor: descriptor,
+                );
+          """
+          if 'To save mobile data, group Together needs the same media on each phone.' not in s:
+              replacement = """      } else if (!descriptor.streamAvailable) {
+                throw StateError(
+                  'To save mobile data, group Together needs the same media on each phone. '
+                  'Use Send or Nearby first, then join the group again.',
+                );
+              } else {
+                final mediaGuest = AnywhereTogetherMediaGuest(
+                  peer: peer,
+                  descriptor: descriptor,
+                );
+          """
+              if stream_fallback not in s:
+                  raise SystemExit('guest media fallback anchor changed')
+              s = s.replace(stream_fallback, replacement, 1)
+
+          stop_anchor = """    await _packetSub?.cancel();
+              await _peerStateSub?.cancel();
+              await _errorSub?.cancel();
+          """
+          if 'await _groupPacketSub?.cancel();' not in s:
+              replacement = """    await _packetSub?.cancel();
+              await _peerStateSub?.cancel();
+              await _errorSub?.cancel();
+              await _groupPacketSub?.cancel();
+              await _groupStateSub?.cancel();
+              await _groupErrorSub?.cancel();
+          """
+              if stop_anchor not in s:
+                  raise SystemExit('stop subscription anchor changed')
+              s = s.replace(stop_anchor, replacement, 1)
+
+          null_anchor = """    _packetSub = null;
+              _peerStateSub = null;
+              _errorSub = null;
+          """
+          if '_groupPacketSub = null;' not in s:
+              replacement = """    _packetSub = null;
+              _peerStateSub = null;
+              _errorSub = null;
+              _groupPacketSub = null;
+              _groupStateSub = null;
+              _groupErrorSub = null;
+          """
+              if null_anchor not in s:
+                  raise SystemExit('stop null anchor changed')
+              s = s.replace(null_anchor, replacement, 1)
+
+          peer_anchor = """    final mediaHost = _mediaHost;
+              final mediaGuest = _mediaGuest;
+              final peer = _peer;
+              _mediaHost = null;
+              _mediaGuest = null;
+              _peer = null;
+              await mediaHost?.stop();
+              await mediaGuest?.stop();
+              await peer?.dispose();
+          """
+          if 'final groupHost = _groupHost;' not in s:
+              replacement = """    final mediaHost = _mediaHost;
+              final mediaGuest = _mediaGuest;
+              final peer = _peer;
+              final groupHost = _groupHost;
+              _mediaHost = null;
+              _mediaGuest = null;
+              _peer = null;
+              _groupHost = null;
+              await mediaHost?.stop();
+              await mediaGuest?.stop();
+              await peer?.dispose();
+              await groupHost?.close();
+          """
+              if peer_anchor not in s:
+                  raise SystemExit('stop peer anchor changed')
+              s = s.replace(peer_anchor, replacement, 1)
+
+          if '_groupInvite = null;' not in s:
+              s = s.replace(
+                  '    _invite = null;\n',
+                  '    _invite = null;\n    _groupInvite = null;\n',
+                  1,
+              )
+
           required = [
-              'final bool streamAvailable;',
-              "'stream_available': streamAvailable",
-              "final streamAvailable = json['stream_available'];",
-              'streamAvailable: streamAvailable is bool ? streamAvailable : true',
+              'class AnywhereTogetherGroupInvite',
+              'AnywhereTogetherGroupHost? _groupHost;',
+              'AnywhereTogetherGroupInvite? get groupInvite',
+              'bool get isGroupHost',
+              'descriptor.streamAvailable',
+              'await groupHost?.close();',
           ]
           if any(item not in s for item in required):
-              raise SystemExit('descriptor low-data patch incomplete')
-          bridge.write_text(s)
+              raise SystemExit('group lifecycle patch incomplete')
+          p.write_text(s)
           PY
 
           git config user.name 'PeterSmart Link'
           git config user.email 'petersmartlink@gmail.com'
-          git add lib/features/together/data/anywhere_together_protocol.dart lib/features/together/data/anywhere_together_media_bridge.dart
-          git commit -m 'feat(together): add low-data group transport metadata'
+          git add lib/features/together/application/anywhere_together_runtime.dart
+          git commit -m 'feat(together): add group runtime lifecycle and data guard'
           git push origin HEAD:main
