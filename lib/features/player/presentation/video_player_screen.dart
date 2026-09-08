@@ -9,9 +9,12 @@ import 'package:media_kit/media_kit.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../core/database/otya_database.dart';
 import '../../../core/models/media_item.dart';
+import '../../../core/services/audio_handler.dart';
+import '../../../core/services/audio_session_service.dart';
 import '../../../core/services/auth_provider.dart';
 import '../../../core/services/ffmpeg_service.dart';
 import '../../../core/services/media_kit_engine.dart';
+import '../../../core/services/media_notification_service.dart';
 import '../../../core/services/native_share_service.dart';
 import '../../../core/services/pip_service.dart';
 import '../../../core/services/playback_coordinator.dart';
@@ -1013,6 +1016,26 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
     _playingSub?.cancel();
     _player = player;
 
+    // The video engine owns the real MediaKit Player, so attach that exact
+    // instance to Android's MediaSession. The manifest alone cannot expose
+    // live notification, lock-screen, Bluetooth or headset controls.
+    AudioHandlerSingleton.instance.attachPlayer(player);
+    MediaNotificationService.instance.registerTransportCallbacks(
+      this,
+      onSkipPrevious: () => unawaited(_previous()),
+      onSkipNext: () => unawaited(_next()),
+    );
+    unawaited(AudioSessionService.instance.activate());
+    unawaited(
+      MediaNotificationService.instance.show(
+        id: widget.mediaItem.id,
+        title: widget.mediaItem.title,
+        artist: 'Video',
+        isPlaying: player.state.playing,
+        albumArtPath: widget.mediaItem.thumbnailPath,
+      ),
+    );
+
     _positionSub = player.stream.position.listen((position) {
       if (mounted && !_isSeeking) setState(() => _position = position);
     });
@@ -1021,6 +1044,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
     });
     _playingSub = player.stream.playing.listen((playing) {
       if (mounted) setState(() => _isPlaying = playing);
+      unawaited(MediaNotificationService.instance.updatePlayState(playing));
       if (_pipInitialized) {
         unawaited(PipService.instance.setVideoPlaying(playing: playing));
       }
@@ -1050,12 +1074,17 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
       _handleAnywhereTogetherRuntimeChanged,
     );
     final player = _player;
+    MediaNotificationService.instance.unregisterTransportCallbacks(this);
     if (player != null) {
       NearbyTogetherRuntime.instance.detachPlayer(player);
       AnywhereTogetherRuntime.instance.detachPlayer(player);
       PlaybackCoordinator.instance.unregister(player);
     }
     if (!_handoffToAnotherVideo) {
+      // Clear the system session before MediaKit disposes its native player.
+      AudioHandlerSingleton.instance.detachPlayer();
+      unawaited(MediaNotificationService.instance.dismiss());
+      unawaited(AudioSessionService.instance.deactivate());
       unawaited(NearbyTogetherRuntime.instance.stop());
       unawaited(AnywhereTogetherRuntime.instance.stop());
       Future.microtask(_restoreOrientation);
