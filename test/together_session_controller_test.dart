@@ -76,27 +76,35 @@ void main() {
     expect(controller.state.messages, isEmpty);
   });
 
-  test('v1 refuses a third participant', () {
+  test('room model honors the staged four-person ceiling', () {
     final now = DateTime.utc(2026, 9, 5, 12);
     final controller = TogetherSessionController()..start(_session(now));
 
-    controller.addParticipant(
-      TogetherParticipant(
-        id: 'guest',
-        displayName: 'Sarah',
-        username: '@sarah',
-        role: TogetherParticipantRole.guest,
-        isConnected: true,
-        joinedAt: now,
-      ),
-      now,
+    for (var index = 1; index <= TogetherPolicy.maxInvitedFriendsV1; index++) {
+      controller.addParticipant(
+        TogetherParticipant(
+          id: 'guest-$index',
+          displayName: 'Friend $index',
+          username: '@friend$index',
+          role: TogetherParticipantRole.guest,
+          isConnected: true,
+          joinedAt: now,
+        ),
+        now,
+      );
+    }
+
+    expect(
+      controller.state.session!.participants,
+      hasLength(TogetherPolicy.maxParticipantsV1),
     );
 
     expect(
       () => controller.addParticipant(
         TogetherParticipant(
-          id: 'guest-2',
-          displayName: 'John',
+          id: 'guest-overflow',
+          displayName: 'Overflow',
+          username: '@overflow',
           role: TogetherParticipantRole.guest,
           isConnected: true,
           joinedAt: now,
