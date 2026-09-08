@@ -1,24 +1,8 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../app/theme/app_colors.dart';
 import '../../shared/widgets/otya_logo.dart';
-
-final Future<Uint8List?> _ownerPortraitBytes = _loadOwnerPortrait();
-
-Future<Uint8List?> _loadOwnerPortrait() async {
-  try {
-    final encoded =
-        await rootBundle.loadString('assets/onboarding/owner_photo.b64');
-    final normalized = encoded.replaceAll(RegExp(r'\s+'), '');
-    if (normalized.isEmpty) return null;
-    return base64Decode(normalized);
-  } catch (_) {
-    return null;
-  }
-}
 
 class OnboardingOverlay extends StatefulWidget {
   const OnboardingOverlay({super.key, required this.onDone});
@@ -38,135 +22,124 @@ class _OnboardingOverlayState extends State<OnboardingOverlay> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('isFirstLaunch', false);
-      await prefs.setBool('onboarding_done', true);
-    } catch (_) {}
-    if (mounted) widget.onDone();
+      if (mounted) widget.onDone();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final compact = size.height < 720 || size.width < 360;
-
-    return Material(
-      color: const Color(0xFF050611),
-      child: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) => SingleChildScrollView(
-            physics: const ClampingScrollPhysics(),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: constraints.maxHeight),
-              child: Column(
-                children: [
-                  _Hero(compact: compact),
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      compact ? 16 : 22,
-                      8,
-                      compact ? 16 : 22,
-                      20,
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: Stack(
+        children: [
+          const _BrandAtmosphere(),
+          SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight - 42,
                     ),
-                    child: Column(
-                      children: [
-                        const Text(
-                          'Welcome to',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontFamily: 'Inter',
-                            fontSize: 28,
-                            height: 1.05,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -.6,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        const _GradientWordmark(),
-                        const SizedBox(height: 2),
-                        const Text(
-                          'PLAYER',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Color(0xFFF4F4F7),
-                            fontFamily: 'Inter',
-                            fontSize: 19,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 8,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Your media. Your way. Offline and private.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Color(0xFFB8B8C6),
-                            fontFamily: 'Inter',
-                            fontSize: 13.5,
-                            height: 1.35,
-                          ),
-                        ),
-                        SizedBox(height: compact ? 16 : 20),
-                        const Row(
-                          children: [
-                            Expanded(
-                              child: _FeatureCard(
-                                icon: Icons.music_note_rounded,
-                                title: 'Music',
-                                subtitle: 'Your tracks',
-                                accent: Color(0xFFFF30D1),
+                    child: IntrinsicHeight(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const _Wordmark(),
+                          const Spacer(),
+                          const SizedBox(height: 28),
+                          const _Hero(),
+                          const SizedBox(height: 30),
+                          const _FeaturePanel(),
+                          const SizedBox(height: 14),
+                          const _PrivacyNote(),
+                          const Spacer(),
+                          const SizedBox(height: 28),
+                          SizedBox(
+                            height: 56,
+                            child: FilledButton(
+                              onPressed: _busy ? null : _finish,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: AppColors.brandBlue,
+                                foregroundColor: Colors.white,
+                                disabledBackgroundColor:
+                                    AppColors.brandBlue.withValues(alpha: .55),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(18),
+                                ),
                               ),
+                              child: _busy
+                                  ? const SizedBox.square(
+                                      dimension: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          'Continue',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                        SizedBox(width: 8),
+                                        Icon(
+                                          Icons.arrow_forward_rounded,
+                                          size: 20,
+                                        ),
+                                      ],
+                                    ),
                             ),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: _FeatureCard(
-                                icon: Icons.smart_display_rounded,
-                                title: 'Video',
-                                subtitle: 'Your videos',
-                                accent: Color(0xFF3D79FF),
-                              ),
-                            ),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: _FeatureCard(
-                                icon: Icons.swap_horiz_rounded,
-                                title: 'Transfer',
-                                subtitle: 'Local & fast',
-                                accent: Color(0xFFFF9D21),
-                              ),
-                            ),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: _FeatureCard(
-                                icon: Icons.lock_rounded,
-                                title: 'Private',
-                                subtitle: 'Keep it yours',
-                                accent: Color(0xFF41E57A),
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: compact ? 16 : 22),
-                        _GradientContinueButton(
-                          busy: _busy,
-                          onPressed: _busy ? null : _finish,
-                        ),
-                        const SizedBox(height: 10),
-                        const Text(
-                          'Android will ask for media and notification permissions only when they are needed.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Color(0xFF77798A),
-                            fontFamily: 'Inter',
-                            fontSize: 10.5,
-                            height: 1.35,
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 12),
+                          const Text(
+                            'OTYA asks for access only when a feature needs it.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: AppColors.textMuted,
+                              fontSize: 11.5,
+                              height: 1.35,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ],
-              ),
+                );
+              },
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BrandAtmosphere extends StatelessWidget {
+  const _BrandAtmosphere();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Positioned.fill(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(0.75, -0.88),
+            radius: 1.15,
+            colors: [
+              Color(0x3327E8FF),
+              Color(0x28126BFF),
+              AppColors.background,
+            ],
+            stops: [0, .38, 1],
           ),
         ),
       ),
@@ -174,111 +147,177 @@ class _OnboardingOverlayState extends State<OnboardingOverlay> {
   }
 }
 
-class _Hero extends StatelessWidget {
-  const _Hero({required this.compact});
-
-  final bool compact;
+class _Wordmark extends StatelessWidget {
+  const _Wordmark();
 
   @override
   Widget build(BuildContext context) {
-    final height = compact ? 300.0 : 390.0;
-    return SizedBox(
-      height: height,
-      width: double.infinity,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: RadialGradient(
-                center: Alignment(-.7, -.25),
-                radius: 1.2,
-                colors: [Color(0x442A5CFF), Color(0x00050611)],
-              ),
-            ),
+    return const Row(
+      children: [
+        OtyaMark(size: 34),
+        SizedBox(width: 10),
+        Text(
+          'OTYA',
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 17,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 2.2,
           ),
-          Positioned(
-            right: -80,
-            top: 70,
-            child: Container(
-              width: 250,
-              height: 250,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: SweepGradient(
-                  colors: [
-                    Color(0x0014B9FF),
-                    Color(0xFF14B9FF),
-                    Color(0xFF8C2DFF),
-                    Color(0xFFFF1DC8),
-                    Color(0xFFFF891E),
-                    Color(0x0014B9FF),
-                  ],
-                ),
+        ),
+        Spacer(),
+        Text(
+          'PLAYER',
+          style: TextStyle(
+            color: AppColors.textMuted,
+            fontSize: 10.5,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.8,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Hero extends StatelessWidget {
+  const _Hero();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          width: 104,
+          height: 104,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppColors.surface.withValues(alpha: .72),
+            borderRadius: BorderRadius.circular(32),
+            border: Border.all(
+              color: AppColors.brandCyan.withValues(alpha: .18),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.brandBlue.withValues(alpha: .18),
+                blurRadius: 40,
+                spreadRadius: 2,
               ),
-              child: Center(
-                child: Container(
-                  width: 208,
-                  height: 208,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Color(0xFF050611),
+            ],
+          ),
+          child: const OtyaMark(size: 72),
+        ),
+        const SizedBox(height: 24),
+        const Text(
+          'Your media. Better together.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 30,
+            height: 1.08,
+            fontWeight: FontWeight.w900,
+            letterSpacing: -.8,
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'Play music and video, share nearby, or watch with a friend — without turning your player into a collection of separate apps.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 14,
+            height: 1.55,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FeaturePanel extends StatelessWidget {
+  const _FeaturePanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+      decoration: BoxDecoration(
+        color: AppColors.surface.withValues(alpha: .76),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
+      child: const Column(
+        children: [
+          _FeatureRow(
+            icon: Icons.play_circle_rounded,
+            title: 'Play',
+            text: 'Music and video with background and system controls.',
+          ),
+          _Divider(),
+          _FeatureRow(
+            icon: Icons.people_alt_rounded,
+            title: 'Together',
+            text: 'Watch nearby or privately with a friend online.',
+          ),
+          _Divider(),
+          _FeatureRow(
+            icon: Icons.swap_horiz_rounded,
+            title: 'Send',
+            text: 'Move media directly when both devices are nearby.',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FeatureRow extends StatelessWidget {
+  const _FeatureRow({
+    required this.icon,
+    required this.title,
+    required this.text,
+  });
+
+  final IconData icon;
+  final String title;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: AppColors.brandBlue.withValues(alpha: .12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, color: AppColors.brandCyan, size: 21),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-              ),
-            ),
-          ),
-          const Positioned.fill(child: _OwnerPortrait()),
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                stops: [0, .45, .78, 1],
-                colors: [
-                  Color(0x26050611),
-                  Color(0x00050611),
-                  Color(0xB8050611),
-                  Color(0xFF050611),
-                ],
-              ),
-            ),
-          ),
-          Positioned(
-            top: 16,
-            left: 18,
-            right: 18,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const OtyaMark(size: 54),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text(
-                      'OTYA',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontFamily: 'Inter',
-                        fontSize: 28,
-                        height: 1,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'PLAYER',
-                      style: TextStyle(
-                        color: Color(0xFFD8D8E1),
-                        fontFamily: 'Inter',
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 5.2,
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 3),
+                Text(
+                  text,
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
                 ),
               ],
             ),
@@ -289,199 +328,50 @@ class _Hero extends StatelessWidget {
   }
 }
 
-class _OwnerPortrait extends StatelessWidget {
-  const _OwnerPortrait();
+class _Divider extends StatelessWidget {
+  const _Divider();
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<Uint8List?>(
-        future: _ownerPortraitBytes,
-        builder: (context, snapshot) {
-          final bytes = snapshot.data;
-          if (bytes != null && bytes.isNotEmpty) {
-            return Image.memory(
-              bytes,
-              fit: BoxFit.cover,
-              alignment: const Alignment(0, -.12),
-              filterQuality: FilterQuality.medium,
-              gaplessPlayback: true,
-            );
-          }
-          return Image.asset(
-            'assets/onboarding/welcome.jpg',
-            fit: BoxFit.cover,
-            alignment: Alignment.center,
-            filterQuality: FilterQuality.medium,
-            errorBuilder: (_, __, ___) => const ColoredBox(
-              color: Color(0xFF050611),
-            ),
-          );
-        },
-      );
+  Widget build(BuildContext context) {
+    return const Divider(height: 1, color: AppColors.borderSubtle);
+  }
 }
 
-class _GradientWordmark extends StatelessWidget {
-  const _GradientWordmark();
+class _PrivacyNote extends StatelessWidget {
+  const _PrivacyNote();
 
   @override
-  Widget build(BuildContext context) => ShaderMask(
-        shaderCallback: (bounds) => const LinearGradient(
-          colors: [
-            Color(0xFF06C8FF),
-            Color(0xFF405CFF),
-            Color(0xFF9B28FF),
-            Color(0xFFFF1FC7),
-            Color(0xFFFF8E1E),
-            Color(0xFFFFD21E),
-          ],
-        ).createShader(bounds),
-        child: const Text(
-          'OTYA',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: Colors.white,
-            fontFamily: 'Inter',
-            fontSize: 68,
-            height: .92,
-            fontWeight: FontWeight.w900,
-            letterSpacing: -3,
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.brandCyan.withValues(alpha: .055),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: AppColors.brandCyan.withValues(alpha: .13),
+        ),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.shield_outlined,
+            color: AppColors.brandCyan,
+            size: 20,
           ),
-        ),
-      );
-}
-
-class _FeatureCard extends StatelessWidget {
-  const _FeatureCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.accent,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color accent;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        constraints: const BoxConstraints(minHeight: 96),
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-        decoration: BoxDecoration(
-          color: const Color(0xA90B0D1C),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: accent.withValues(alpha: .52)),
-          boxShadow: [
-            BoxShadow(
-              color: accent.withValues(alpha: .08),
-              blurRadius: 18,
-              spreadRadius: 1,
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 26, color: accent),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontFamily: 'Inter',
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              subtitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Color(0xFF9B9DAD),
-                fontFamily: 'Inter',
-                fontSize: 9.5,
-              ),
-            ),
-          ],
-        ),
-      );
-}
-
-class _GradientContinueButton extends StatelessWidget {
-  const _GradientContinueButton({required this.busy, required this.onPressed});
-
-  final bool busy;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-        button: true,
-        label: 'Continue to OTYA',
-        child: SizedBox(
-          width: double.infinity,
-          height: 58,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
-              gradient: const LinearGradient(
-                colors: [
-                  Color(0xFF00C7FF),
-                  Color(0xFF315CFF),
-                  Color(0xFF8D2BFF),
-                  Color(0xFFFF1CC9),
-                  Color(0xFFFF8B1B),
-                ],
-              ),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x55315CFF),
-                  blurRadius: 22,
-                  offset: Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: onPressed,
-                borderRadius: BorderRadius.circular(24),
-                child: Center(
-                  child: busy
-                      ? const SizedBox.square(
-                          dimension: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.4,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Continue',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontFamily: 'Inter',
-                                fontSize: 20,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            SizedBox(width: 8),
-                            Icon(
-                              Icons.arrow_forward_rounded,
-                              color: Colors.white,
-                              size: 25,
-                            ),
-                          ],
-                        ),
-                ),
+          SizedBox(width: 11),
+          Expanded(
+            child: Text(
+              'Your local media stays on your device unless you choose to send or share it.',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+                height: 1.45,
               ),
             ),
           ),
-        ),
-      );
+        ],
+      ),
+    );
+  }
 }
