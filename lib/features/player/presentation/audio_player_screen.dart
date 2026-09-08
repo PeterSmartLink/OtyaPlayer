@@ -100,7 +100,6 @@ class AudioPlayerNotifier extends StateNotifier<AudioPlayerState> {
   AudioPlayerNotifier() : super(const AudioPlayerState());
 
   void init() {
-    AudioHandlerSingleton.instance.attachPlayer(_player);
     _attachStreams();
     MediaNotificationService.instance.onSkipPrevious = skipPrevious;
     MediaNotificationService.instance.onSkipNext = skipNext;
@@ -215,6 +214,7 @@ class AudioPlayerNotifier extends StateNotifier<AudioPlayerState> {
 
       await PlaybackCoordinator.instance.register(_player, 'audio');
       if (!isCurrent()) return false;
+      AudioHandlerSingleton.instance.attachPlayer(_player);
       await AudioSessionService.instance.activate();
       if (!isCurrent()) return false;
       await _player.play();
@@ -244,7 +244,6 @@ class AudioPlayerNotifier extends StateNotifier<AudioPlayerState> {
       unawaited(AutoEqService.instance.applyPreset(eqPreset));
     }
     _container?.read(miniPlayerItemProvider.notifier).state = item;
-    _updateNotification();
 
     final saved = OtyaDatabase.instance.getSeekPosition(item.id);
 
@@ -272,6 +271,7 @@ class AudioPlayerNotifier extends StateNotifier<AudioPlayerState> {
           hasLoadError: false,
         );
       }
+      _updateNotification();
       OtyaDatabase.instance.recordPlay(item).ignore();
     } catch (error) {
       debugPrint('[AudioPlayer] load error: $error');
