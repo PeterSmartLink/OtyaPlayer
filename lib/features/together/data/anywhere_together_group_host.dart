@@ -131,41 +131,23 @@ class AnywhereTogetherGroupHost {
       await mediaHost.start(mediaFile);
     }
 
-    late final _AnywhereTogetherGroupEntry entry;
-    final packetSub = peer.packets.listen((packet) {
-      if (_closed) return;
-      _packets.add(
-        AnywhereTogetherGroupPacket(
-          participantId: participantId,
-          participant: creation.room.guest,
-          peer: peer,
-          packet: packet,
-        ),
-      );
-    });
-    final stateSub = peer.states.listen((state) {
-      if (_closed) return;
-      _states.add(
-        AnywhereTogetherGroupPeerState(
-          participantId: participantId,
-          participant: creation.room.guest,
-          peer: peer,
-          state: state,
-        ),
-      );
-    });
-    final errorSub = peer.errors.listen((message) {
-      if (_closed) return;
-      _errors.add(
-        AnywhereTogetherGroupPeerError(
-          participantId: participantId,
-          participant: creation.room.guest,
-          message: message,
-        ),
-      );
-    });
+    final packetSub = _listenPackets(
+      participantId: participantId,
+      participant: creation.room.guest,
+      peer: peer,
+    );
+    final stateSub = _listenStates(
+      participantId: participantId,
+      participant: creation.room.guest,
+      peer: peer,
+    );
+    final errorSub = _listenErrors(
+      participantId: participantId,
+      participant: creation.room.guest,
+      peer: peer,
+    );
 
-    entry = _AnywhereTogetherGroupEntry(
+    _entries[participantId] = _AnywhereTogetherGroupEntry(
       participantId: participantId,
       creation: creation,
       peer: peer,
@@ -174,7 +156,59 @@ class AnywhereTogetherGroupHost {
       stateSub: stateSub,
       errorSub: errorSub,
     );
-    _entries[participantId] = entry;
+  }
+
+  StreamSubscription<AnywhereTogetherPacket> _listenPackets({
+    required String participantId,
+    required TogetherRoomParticipantView participant,
+    required AnywhereTogetherPeer peer,
+  }) {
+    return peer.packets.listen((packet) {
+      if (_closed) return;
+      _packets.add(
+        AnywhereTogetherGroupPacket(
+          participantId: participantId,
+          participant: participant,
+          peer: peer,
+          packet: packet,
+        ),
+      );
+    });
+  }
+
+  StreamSubscription<AnywhereTogetherPeerState> _listenStates({
+    required String participantId,
+    required TogetherRoomParticipantView participant,
+    required AnywhereTogetherPeer peer,
+  }) {
+    return peer.states.listen((state) {
+      if (_closed) return;
+      _states.add(
+        AnywhereTogetherGroupPeerState(
+          participantId: participantId,
+          participant: participant,
+          peer: peer,
+          state: state,
+        ),
+      );
+    });
+  }
+
+  StreamSubscription<String> _listenErrors({
+    required String participantId,
+    required TogetherRoomParticipantView participant,
+    required AnywhereTogetherPeer peer,
+  }) {
+    return peer.errors.listen((message) {
+      if (_closed) return;
+      _errors.add(
+        AnywhereTogetherGroupPeerError(
+          participantId: participantId,
+          participant: participant,
+          message: message,
+        ),
+      );
+    });
   }
 
   Future<void> connectParticipant(String participantId) async {
