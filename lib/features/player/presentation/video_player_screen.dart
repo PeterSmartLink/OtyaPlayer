@@ -23,6 +23,7 @@ import '../../../shared/widgets/speed_picker_sheet.dart';
 import '../../together/application/anywhere_together_runtime.dart';
 import '../../together/application/nearby_together_runtime.dart';
 import '../../together/application/nearby_together_session.dart';
+import '../../together/application/together_release_gate.dart';
 import '../../together/data/anywhere_together_security.dart';
 import '../../together/presentation/anywhere_together_live_surface.dart';
 import '../../together/presentation/anywhere_together_sheet.dart';
@@ -350,6 +351,20 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
   }
 
   Future<void> _showTogetherEntry() async {
+    if (!TogetherReleaseGate.isPubliclyEnabled) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Watch Together is still being tested and is not available in this build.',
+            ),
+            backgroundColor: AppColors.surface,
+          ),
+        );
+      }
+      return;
+    }
+
     final player = _player;
     if (player == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -670,7 +685,8 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
                   await _shareMedia();
                 },
               ),
-            ListTile(
+            if (TogetherReleaseGate.isPubliclyEnabled)
+              ListTile(
               leading: const Icon(
                 Icons.people_alt_rounded,
                 color: AppColors.accent,
