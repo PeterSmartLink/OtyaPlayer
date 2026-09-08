@@ -1,0 +1,245 @@
+name: One-shot device playback runtime fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/one-shot-device-runtime-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+      - name: Wire video playback into Otya MediaSession
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path('lib/features/player/presentation/video_player_screen.dart')
+          text = path.read_text()
+
+          old_imports = """import '../../../core/services/auth_provider.dart';
+          import '../../../core/services/ffmpeg_service.dart';
+          import '../../../core/services/media_kit_engine.dart';
+          import '../../../core/services/native_share_service.dart';
+          import '../../../core/services/pip_service.dart';
+          import '../../../core/services/playback_coordinator.dart';
+          """
+          new_imports = """import '../../../core/services/audio_handler.dart';
+          import '../../../core/services/audio_session_service.dart';
+          import '../../../core/services/auth_provider.dart';
+          import '../../../core/services/ffmpeg_service.dart';
+          import '../../../core/services/media_kit_engine.dart';
+          import '../../../core/services/media_notification_service.dart';
+          import '../../../core/services/native_share_service.dart';
+          import '../../../core/services/pip_service.dart';
+          import '../../../core/services/playback_coordinator.dart';
+          """
+          if old_imports not in text:
+              raise SystemExit('video import contract changed')
+          text = text.replace(old_imports, new_imports, 1)
+
+          old_attach = """  void _attachPlayer(Player player) {
+            if (_player == player) return;
+            _positionSub?.cancel();
+            _durationSub?.cancel();
+            _playingSub?.cancel();
+            _player = player;
+
+            _positionSub = player.stream.position.listen((position) {
+              if (mounted && !_isSeeking) setState(() => _position = position);
+            });
+            _durationSub = player.stream.duration.listen((duration) {
+              if (mounted) setState(() => _duration = duration);
+            });
+            _playingSub = player.stream.playing.listen((playing) {
+              if (mounted) setState(() => _isPlaying = playing);
+              if (_pipInitialized) {
+                unawaited(PipService.instance.setVideoPlaying(playing: playing));
+              }
+            });
+
+            final nearby = NearbyTogetherRuntime.instance;
+            if (nearby.active) nearby.attachPlayer(player);
+            final anywhere = AnywhereTogetherRuntime.instance;
+            if (anywhere.active) anywhere.attachPlayer(player);
+          }
+          """
+          new_attach = """  void _attachPlayer(Player player) {
+            if (_player == player) return;
+            _positionSub?.cancel();
+            _durationSub?.cancel();
+            _playingSub?.cancel();
+            _player = player;
+
+            // The video engine owns the real MediaKit Player, so attach that exact
+            // instance to Android's MediaSession. Without this bridge Android sees
+            // the service in the manifest but has no live player for notification,
+            // lock-screen, Bluetooth or headset controls.
+            AudioHandlerSingleton.instance.attachPlayer(player);
+            MediaNotificationService.instance.registerTransportCallbacks(
+              this,
+              onSkipPrevious: () => unawaited(_previous()),
+              onSkipNext: () => unawaited(_next()),
+            );
+            unawaited(AudioSessionService.instance.activate());
+            unawaited(
+              MediaNotificationService.instance.show(
+                id: widget.mediaItem.id,
+                title: widget.mediaItem.title,
+                artist: 'Video',
+                isPlaying: player.state.playing,
+                albumArtPath: widget.mediaItem.thumbnailPath,
+              ),
+            );
+
+            _positionSub = player.stream.position.listen((position) {
+              if (mounted && !_isSeeking) setState(() => _position = position);
+            });
+            _durationSub = player.stream.duration.listen((duration) {
+              if (mounted) setState(() => _duration = duration);
+            });
+            _playingSub = player.stream.playing.listen((playing) {
+              if (mounted) setState(() => _isPlaying = playing);
+              unawaited(MediaNotificationService.instance.updatePlayState(playing));
+              if (_pipInitialized) {
+                unawaited(PipService.instance.setVideoPlaying(playing: playing));
+              }
+            });
+
+            final nearby = NearbyTogetherRuntime.instance;
+            if (nearby.active) nearby.attachPlayer(player);
+            final anywhere = AnywhereTogetherRuntime.instance;
+            if (anywhere.active) anywhere.attachPlayer(player);
+          }
+          """
+          if old_attach not in text:
+              raise SystemExit('video attach contract changed')
+          text = text.replace(old_attach, new_attach, 1)
+
+          old_dispose = """    final player = _player;
+            if (player != null) {
+              NearbyTogetherRuntime.instance.detachPlayer(player);
+              AnywhereTogetherRuntime.instance.detachPlayer(player);
+              PlaybackCoordinator.instance.unregister(player);
+            }
+            if (!_handoffToAnotherVideo) {
+              unawaited(NearbyTogetherRuntime.instance.stop());
+              unawaited(AnywhereTogetherRuntime.instance.stop());
+              Future.microtask(_restoreOrientation);
+            }
+          """
+          new_dispose = """    final player = _player;
+            MediaNotificationService.instance.unregisterTransportCallbacks(this);
+            if (player != null) {
+              NearbyTogetherRuntime.instance.detachPlayer(player);
+              AnywhereTogetherRuntime.instance.detachPlayer(player);
+              PlaybackCoordinator.instance.unregister(player);
+            }
+            if (!_handoffToAnotherVideo) {
+              // Detach before MediaKitEngine disposes the native Player so Android
+              // never keeps a stale MediaSession pointing at a dead video engine.
+              AudioHandlerSingleton.instance.detachPlayer();
+              unawaited(MediaNotificationService.instance.dismiss());
+              unawaited(AudioSessionService.instance.deactivate());
+              unawaited(NearbyTogetherRuntime.instance.stop());
+              unawaited(AnywhereTogetherRuntime.instance.stop());
+              Future.microtask(_restoreOrientation);
+            }
+          """
+          if old_dispose not in text:
+              raise SystemExit('video dispose contract changed')
+          text = text.replace(old_dispose, new_dispose, 1)
+
+          path.write_text(text)
+
+          test = Path('test/video_system_media_session_contract_test.dart')
+          test.write_text("""import 'dart:io';
+
+          import 'package:flutter_test/flutter_test.dart';
+
+          void main() {
+            final video = File(
+              'lib/features/player/presentation/video_player_screen.dart',
+            ).readAsStringSync();
+            final notifications = File(
+              'lib/core/services/media_notification_service.dart',
+            ).readAsStringSync();
+
+            test('video owns Android MediaSession while its player is active', () {
+              expect(
+                video.contains('AudioHandlerSingleton.instance.attachPlayer(player)'),
+                isTrue,
+              );
+              expect(
+                video.contains('MediaNotificationService.instance.show('),
+                isTrue,
+              );
+              expect(
+                video.contains('MediaNotificationService.instance.updatePlayState(playing)'),
+                isTrue,
+              );
+              expect(
+                video.contains('AudioSessionService.instance.activate()'),
+                isTrue,
+              );
+            });
+
+            test('video transport callbacks do not permanently replace music controls', () {
+              expect(
+                notifications.contains('registerTransportCallbacks('),
+                isTrue,
+              );
+              expect(
+                notifications.contains('unregisterTransportCallbacks(Object owner)'),
+                isTrue,
+              );
+              expect(
+                video.contains('onSkipPrevious: () => unawaited(_previous())'),
+                isTrue,
+              );
+              expect(
+                video.contains('onSkipNext: () => unawaited(_next())'),
+                isTrue,
+              );
+              expect(
+                video.contains(
+                  'MediaNotificationService.instance.unregisterTransportCallbacks(this)',
+                ),
+                isTrue,
+              );
+            });
+
+            test('leaving video clears stale system playback state', () {
+              expect(
+                video.contains('AudioHandlerSingleton.instance.detachPlayer()'),
+                isTrue,
+              );
+              expect(
+                video.contains('MediaNotificationService.instance.dismiss()'),
+                isTrue,
+              );
+              expect(
+                video.contains('AudioSessionService.instance.deactivate()'),
+                isTrue,
+              );
+            });
+          }
+          """)
+
+          Path('.github/workflows/one-shot-device-runtime-fix.yml').unlink()
+          PY
+
+          git config user.name 'PeterSmart Link'
+          git config user.email 'petersmartlink@gmail.com'
+          git add lib/features/player/presentation/video_player_screen.dart test/video_system_media_session_contract_test.dart .github/workflows/one-shot-device-runtime-fix.yml
+          git commit -m 'fix(player): connect video to system media controls'
+          git push origin HEAD:main
