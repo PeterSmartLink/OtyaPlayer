@@ -60,7 +60,7 @@ jobs:
             }
           }
 
-"""
+          """
               s = s.replace(anchor, method + anchor, 1)
           required = ['_invitesUri', 'pendingInvites()', "inviteToken.trim().isEmpty ? <String, Object?>{}"]
           if any(item not in s for item in required):
