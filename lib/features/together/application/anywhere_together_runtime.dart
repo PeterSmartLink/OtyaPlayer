@@ -193,7 +193,7 @@ class AnywhereTogetherRuntime extends ChangeNotifier {
   /// should open that URL in the existing Player before calling [attachPlayer].
   Future<AnywherePlaybackPlan> joinGuest({
     required String roomId,
-    required String inviteToken,
+    String inviteToken = '',
     required Player player,
     MediaItem? candidateMediaItem,
   }) async {
