@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:isolate';
 
 import 'package:flutter/services.dart';
@@ -21,7 +20,7 @@ const _mediaEventChannel = EventChannel('com.otyaplayer.app/media_events');
 ///
 /// Loading strategy (offline-first, instant UI):
 ///   Phase 1a: in-memory cache          → 0 ms, truly instant
-///   Phase 1b: Hive history seed        → ~5 ms, never blank on cold start
+///   Phase 1b: Hive library snapshot    → ~5 ms, never blank on cold start
 ///   Phase 2:  background scan via      → silent update, no shimmer
 ///             MediaStore (fast, ~200ms)
 ///   Phase 3:  live MediaStore observer → auto-refresh on new files
@@ -32,7 +31,6 @@ final mediaLibraryProvider =
 
 class MediaLibraryNotifier extends AsyncNotifier<List<MediaItem>> {
   Timer? _resumeDebounce;
-  Set<String>? _knownHiveIds;
 
   @override
   Future<List<MediaItem>> build() async {
@@ -67,10 +65,10 @@ class MediaLibraryNotifier extends AsyncNotifier<List<MediaItem>> {
       return cached;
     }
 
-    final history = OtyaDatabase.instance.getRecentlyPlayed(limit: 9999);
-    if (history.isNotEmpty) {
+    final snapshot = OtyaDatabase.instance.getLibrarySnapshot();
+    if (snapshot.isNotEmpty) {
       Future.microtask(_backgroundRefresh);
-      return history;
+      return snapshot;
     }
 
     final db = OtyaDatabase.instance;
@@ -106,9 +104,7 @@ class MediaLibraryNotifier extends AsyncNotifier<List<MediaItem>> {
         return;
       }
 
-      if (fresh.isNotEmpty) {
-        _writeBackToHive(fresh).ignore();
-      }
+      _writeBackToHive(fresh).ignore();
 
       // Always recompute duplicates so an empty/new library clears old groups.
       unawaited(_detectDuplicates(fresh));
@@ -164,16 +160,7 @@ class MediaLibraryNotifier extends AsyncNotifier<List<MediaItem>> {
 
   Future<void> _writeBackToHive(List<MediaItem> items) async {
     try {
-      final db = OtyaDatabase.instance;
-      _knownHiveIds ??= LinkedHashSet<String>.from(
-        db.getRecentlyPlayed(limit: 9999).map((e) => e.id),
-      );
-      for (final item in items) {
-        if (!_knownHiveIds!.contains(item.id)) {
-          await db.seedLibraryItem(item);
-          _knownHiveIds!.add(item.id);
-        }
-      }
+      await OtyaDatabase.instance.replaceLibrarySnapshot(items);
     } catch (e) {
       debugPrint('[MediaLibrary] Hive write-back failed: $e');
     }

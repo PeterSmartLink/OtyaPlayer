@@ -21,6 +21,7 @@ class OtyaDatabase {
   // ── Box references ─────────────────────────────────────────────────────────
 
   Box<MediaItem>? _historyBox;
+  Box<MediaItem>? _libraryBox;
   Box<Playlist>?  _playlistsBox;
   Box<int>?       _seekBox;       // mediaId → position in milliseconds
   Box<dynamic>?   _shelfBox;      // generic shelf cache
@@ -42,12 +43,15 @@ class OtyaDatabase {
     if (!Hive.isAdapterRegistered(10)) Hive.registerAdapter(DurationAdapter());
 
     _historyBox   = await _openBox<MediaItem>(HiveBoxes.history);
+    _libraryBox   = await _openBox<MediaItem>(HiveBoxes.libraryCache);
     _playlistsBox = await _openBox<Playlist>(HiveBoxes.playlists);
     _seekBox      = await _openBox<int>(HiveBoxes.seekPositions);
     _shelfBox     = await _openBox<dynamic>(HiveBoxes.shelfCache);
     _vaultBox     = await _openBox<VaultItem>(HiveBoxes.vault);
     _lyricsBox    = await _openBox<String>(HiveBoxes.lyrics);
     _favoritesBox = await _openBox<bool>(HiveBoxes.favorites);
+
+    await _migrateLegacyLibrarySeeds();
 
     debugPrint('[OtyaDB] All boxes opened.');
   }
@@ -77,6 +81,7 @@ class OtyaDatabase {
       await Hive.close();
       for (final name in [
         HiveBoxes.history,
+        HiveBoxes.libraryCache,
         HiveBoxes.playlists,
         HiveBoxes.seekPositions,
         HiveBoxes.shelfCache,
@@ -90,6 +95,31 @@ class OtyaDatabase {
       }
     } catch (_) {}
     await init();
+  }
+
+  /// Moves the old cold-start entries out of playback history. Older builds
+  /// used `seed_*` keys in the history box, which could make unplayed files
+  /// appear in Recently Played. Genuine `play_*` entries remain untouched.
+  Future<void> _migrateLegacyLibrarySeeds() async {
+    final history = _historyBox;
+    final library = _libraryBox;
+    if (history == null || library == null) return;
+    try {
+      final seedKeys = history.keys
+          .where((key) => key is String && key.startsWith('seed_'))
+          .toList(growable: false);
+      if (seedKeys.isEmpty) return;
+
+      final migrated = <String, MediaItem>{};
+      for (final key in seedKeys) {
+        final item = history.get(key);
+        if (item != null) migrated[item.id] = item;
+      }
+      if (migrated.isNotEmpty) await library.putAll(migrated);
+      await history.deleteAll(seedKeys);
+    } catch (e) {
+      debugPrint('[OtyaDB] library-cache migration error: $e');
+    }
   }
 
   // ── Playback history ───────────────────────────────────────────────────────
@@ -370,19 +400,33 @@ class OtyaDatabase {
     }
   }
 
-  /// Seeds a library item into history WITHOUT stamping lastPlayedAt.
-  /// Used by MediaLibraryNotifier to populate history from a fresh scan
-  /// so Phase 1b cold-start seeding works on subsequent launches.
-  Future<void> seedLibraryItem(MediaItem item) async {
-    final box = _historyBox;
+  /// Returns the last successful media scan for an immediate cold-start UI.
+  /// Playback history is intentionally stored in a separate box.
+  List<MediaItem> getLibrarySnapshot() {
+    final box = _libraryBox;
+    if (box == null || !box.isOpen) return [];
+    try {
+      return box.values.toList(growable: false);
+    } catch (e) {
+      debugPrint('[OtyaDB] getLibrarySnapshot error: $e');
+      return [];
+    }
+  }
+
+  /// Replaces the cold-start snapshot without clearing first, so an
+  /// interrupted write cannot temporarily erase the last usable library.
+  Future<void> replaceLibrarySnapshot(List<MediaItem> items) async {
+    final box = _libraryBox;
     if (box == null || !box.isOpen) return;
     try {
-      // Only seed if not already present.
-      if (box.values.any((i) => i.id == item.id)) return;
-      // Use a stable key so the same item is never duplicated.
-      await box.put('seed_${item.id}', item);
+      final next = <String, MediaItem>{for (final item in items) item.id: item};
+      await box.putAll(next);
+      final staleKeys = box.keys
+          .where((key) => key is! String || !next.containsKey(key))
+          .toList(growable: false);
+      if (staleKeys.isNotEmpty) await box.deleteAll(staleKeys);
     } catch (e) {
-      debugPrint('[OtyaDB] seedLibraryItem error: $e');
+      debugPrint('[OtyaDB] replaceLibrarySnapshot error: $e');
     }
   }
 

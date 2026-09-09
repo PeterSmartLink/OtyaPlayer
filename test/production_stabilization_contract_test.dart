@@ -143,4 +143,21 @@ void main() {
     expect(mountedGuard, greaterThanOrEqualTo(0));
     expect(mountedGuard, lessThan(fallback));
   });
+
+  test('cold-start library cache stays separate from playback history', () {
+    final database =
+        File('lib/core/database/otya_database.dart').readAsStringSync();
+    final provider = File(
+      'lib/features/my_space/presentation/providers/my_space_provider.dart',
+    ).readAsStringSync();
+
+    expect(database, contains('Box<MediaItem>? _libraryBox'));
+    expect(database, contains('getLibrarySnapshot()'));
+    expect(database, contains('replaceLibrarySnapshot('));
+    expect(database, contains('_migrateLegacyLibrarySeeds()'));
+    expect(provider, contains('getLibrarySnapshot()'));
+    expect(provider, contains('replaceLibrarySnapshot(items)'));
+    expectNotContains(provider, 'getRecentlyPlayed(limit: 9999)');
+    expectNotContains(provider, 'seedLibraryItem(');
+  });
 }
