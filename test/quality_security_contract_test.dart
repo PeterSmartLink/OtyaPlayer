@@ -54,4 +54,19 @@ void main() {
       );
     }
   });
+
+  test('production diagnostics do not print sensitive remote data', () {
+    final push = File(
+      'lib/core/services/push_notification_service.dart',
+    ).readAsStringSync();
+    final device =
+        File('lib/core/services/device_service.dart').readAsStringSync();
+    final feedback =
+        File('lib/core/services/feedback_service.dart').readAsStringSync();
+
+    expect(push, isNot(contains('payload=$payload')));
+    expect(device, isNot(contains('registered device $deviceId')));
+    expect(device, isNot(contains('${response.body}')));
+    expect(feedback, isNot(contains('${res.body}')));
+  });
 }

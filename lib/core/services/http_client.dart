@@ -30,7 +30,6 @@ class AppHttpClient {
 
   http.Client get client => _client;
 
-  static const Duration _connectTimeout = Duration(seconds: 15);
   static const Duration _receiveTimeout = Duration(seconds: 30);
   static const int _maxRetries = 2;
   static const List<Duration> _retryDelays = [
@@ -86,7 +85,10 @@ class AppHttpClient {
     int attempt = 0;
     while (true) {
       try {
-        final response = await request().timeout(_connectTimeout);
+        // The verb helper owns the complete request timeout. Wrapping it in a
+        // second, shorter timeout made the documented 30-second mobile-network
+        // allowance unreachable and could trigger avoidable retries at 15 s.
+        final response = await request();
         if (_isRetryableStatus(response.statusCode) &&
             attempt < _maxRetries) {
           debugPrint(

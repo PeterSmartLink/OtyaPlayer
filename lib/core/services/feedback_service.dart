@@ -77,7 +77,9 @@ class FeedbackService {
           )
           .timeout(const Duration(seconds: 8));
       if (res.statusCode >= 400) {
-        debugPrint('[FeedbackService] Worker $path HTTP ${res.statusCode}: ${res.body}');
+        debugPrint(
+          '[FeedbackService] Worker $path HTTP ${res.statusCode}',
+        );
       }
     } catch (e) {
       debugPrint('[FeedbackService] Worker post failed (non-fatal): $e');

@@ -97,11 +97,12 @@ class DeviceService {
 
       if (response.statusCode == 200) {
         await prefs.setString(_kRegisteredBuild, currentBuild);
-        debugPrint('[DeviceService] registered device $deviceId');
+        if (kDebugMode) {
+          debugPrint('[DeviceService] registration completed');
+        }
       } else {
         debugPrint(
-          '[DeviceService] registration returned ${response.statusCode}: '
-          '${response.body}',
+          '[DeviceService] registration returned ${response.statusCode}',
         );
       }
     } catch (e) {

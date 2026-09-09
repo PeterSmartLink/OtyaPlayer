@@ -48,7 +48,9 @@ class PushNotificationService {
 
   void _onTap(NotificationResponse response) {
     final payload = response.payload ?? '';
-    debugPrint('[PushNotif] tapped id=${response.id} payload=$payload');
+    if (kDebugMode) {
+      debugPrint('[PushNotif] tapped id=${response.id}');
+    }
 
     if (payload.startsWith(_prefixUpdate)) {
       final rawUrl = payload.substring(_prefixUpdate.length).trim();

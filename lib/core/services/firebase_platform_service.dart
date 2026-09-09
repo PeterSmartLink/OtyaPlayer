@@ -156,7 +156,11 @@ class FirebasePlatformService {
     try {
       return await FirebaseAppCheck.instance.getToken(forceRefresh);
     } catch (e) {
-      debugPrint('[Firebase:AppCheck] token unavailable: $e');
+      if (kDebugMode) {
+        debugPrint(
+          '[Firebase:AppCheck] token unavailable: ${e.runtimeType}',
+        );
+      }
       return null;
     }
   }

@@ -122,4 +122,25 @@ void main() {
       expectNotContains(source, 'existsSync()');
     }
   });
+
+  test('network timeout policy is not shortened by a nested wrapper', () {
+    final client =
+        File('lib/core/services/http_client.dart').readAsStringSync();
+
+    expect(client, contains(".timeout(timeout)"));
+    expectNotContains(client, 'request().timeout(_connectTimeout)');
+    expectNotContains(client, 'static const Duration _connectTimeout');
+  });
+
+  test('startup fallback never uses widget state after disposal', () {
+    final app = File('lib/app/app.dart').readAsStringSync();
+    final fallback = app.indexOf(
+      'ref.read(settingsProvider.notifier).hydrate(const AppSettings());',
+    );
+    final mountedGuard = app.lastIndexOf('if (!mounted) return;', fallback);
+
+    expect(fallback, greaterThanOrEqualTo(0));
+    expect(mountedGuard, greaterThanOrEqualTo(0));
+    expect(mountedGuard, lessThan(fallback));
+  });
 }

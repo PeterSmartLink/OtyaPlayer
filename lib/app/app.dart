@@ -125,14 +125,16 @@ class _OtyaPlayerAppState extends ConsumerState<OtyaPlayerApp> {
       });
       _scheduleStartupDialogs();
     } catch (_) {
+      // The preference/settings reads can finish after the root widget has
+      // been disposed (for example during an activity recreation). Riverpod's
+      // ref and widget state must not be touched after that point.
+      if (!mounted) return;
       ref.read(settingsProvider.notifier).hydrate(const AppSettings());
-      if (mounted) {
-        setState(() {
-          _onboardingDone = true;
-          _checking = false;
-        });
-        _scheduleStartupDialogs();
-      }
+      setState(() {
+        _onboardingDone = true;
+        _checking = false;
+      });
+      _scheduleStartupDialogs();
     }
   }
 
