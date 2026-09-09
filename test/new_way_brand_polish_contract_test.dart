@@ -23,7 +23,9 @@ void main() {
     expect(channels, contains("'Otya Tools — Complete'"));
     expect(channels, contains("'Otya Tools — Errors'"));
     expect(push, contains("'Otya — Updates'"));
-    expect(push, contains("contentTitle: 'Otya \$version is available'"));
+    expect(push, contains("final title = 'Otya \$version is ready'"));
+    expect(push, contains("summaryText: 'Official Otya update'"));
+    expect(push, isNot(contains("contentTitle: 'Otya \$version is available'")));
     expect(push, contains("'Otya — Announcements'"));
     expect(push, contains("uri.scheme != 'https'"));
     expect(push, contains("host.endsWith('.\$_officialHost')"));
