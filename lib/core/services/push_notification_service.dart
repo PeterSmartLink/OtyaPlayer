@@ -123,6 +123,15 @@ class PushNotificationService {
       debugPrint('[PushNotif] rejected untrusted update destination.');
     }
 
+    // Keep the Android shade concise. Detailed release notes belong in the
+    // update dialog / What's New / official download page, not in a system
+    // notification where Markdown becomes noisy raw text.
+    final hasReleaseNotes = releaseNotes.trim().isNotEmpty;
+    final title = 'Otya $version is ready';
+    final body = hasReleaseNotes
+        ? 'New features and improvements are ready. Tap to see what’s new.'
+        : 'A new Otya version is ready. Tap to update.';
+
     final androidDetails = AndroidNotificationDetails(
       _chUpdates,
       'Otya — Updates',
@@ -131,16 +140,16 @@ class PushNotificationService {
       priority: Priority.high,
       icon: '@drawable/ic_notification',
       styleInformation: BigTextStyleInformation(
-        releaseNotes,
-        contentTitle: 'Otya $version is available',
-        summaryText: 'Tap to open the official update destination',
+        body,
+        contentTitle: title,
+        summaryText: 'Official Otya update',
       ),
     );
 
     await sharedNotificationsPlugin.show(
       idUpdate,
-      'Update available — v$version',
-      releaseNotes,
+      title,
+      body,
       NotificationDetails(android: androidDetails),
       payload: safeUrl.isNotEmpty ? '$_prefixUpdate$safeUrl' : null,
     );
