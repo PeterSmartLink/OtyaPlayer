@@ -127,7 +127,7 @@ void main() {
     final client =
         File('lib/core/services/http_client.dart').readAsStringSync();
 
-    expect(client, contains(".timeout(timeout)"));
+    expect(client, contains('.timeout(timeout)'));
     expectNotContains(client, 'request().timeout(_connectTimeout)');
     expectNotContains(client, 'static const Duration _connectTimeout');
   });
