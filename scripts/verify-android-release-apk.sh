@@ -99,6 +99,13 @@ reject_literal "$EVIDENCE_DIR/permissions.txt" 'com.google.android.gms.permissio
 reject_literal "$EVIDENCE_DIR/permissions.txt" 'android.permission.ACCESS_ADSERVICES_AD_ID' 'Android AdServices advertising ID permission'
 reject_literal "$EVIDENCE_DIR/permissions.txt" 'android.permission.ACCESS_ADSERVICES_ATTRIBUTION' 'Android AdServices attribution permission'
 
+# Anywhere Together uses WebRTC data channels only. Native libwebrtc must not
+# broaden the installed app into microphone capture or audio-routing access.
+# This is checked on the final merged APK, not only in the source manifest, so
+# a future transitive plugin manifest cannot silently restore these permissions.
+reject_literal "$EVIDENCE_DIR/permissions.txt" 'android.permission.RECORD_AUDIO' 'microphone capture permission'
+reject_literal "$EVIDENCE_DIR/permissions.txt" 'android.permission.MODIFY_AUDIO_SETTINGS' 'microphone/audio-routing permission'
+
 # R8 must retain Android entry points loaded by class name/reflection.
 require_literal "$EVIDENCE_DIR/dex-packages.txt" 'com.ryanheise.audioservice.AudioService' 'AudioService class after R8'
 require_literal "$EVIDENCE_DIR/dex-packages.txt" 'com.ryanheise.audioservice.MediaButtonReceiver' 'MediaButtonReceiver class after R8'
