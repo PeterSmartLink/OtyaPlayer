@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'shared_notification_plugin.dart';
@@ -14,6 +15,7 @@ class NotificationService {
   static final NotificationService instance = NotificationService._();
 
   static const _officialHost = 'petersmartlink.com';
+  static const _permissionPromptKey = 'notification_permission_prompted_v1';
 
   Future<void> init() async {
     await initSharedNotificationsPlugin();
@@ -30,6 +32,17 @@ class NotificationService {
     if (android == null) return true;
     final granted = await android.requestNotificationsPermission();
     return granted ?? true;
+  }
+
+  /// Gives upgraded Android 13+ installs the same one-time notification choice
+  /// as newly onboarded users without prompting again on every app launch.
+  Future<bool?> requestPermissionOnce() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_permissionPromptKey) == true) return null;
+
+    final granted = await requestPermission();
+    await prefs.setBool(_permissionPromptKey, true);
+    return granted;
   }
 
   /// Public entry-point called by [sharedNotificationRouter].

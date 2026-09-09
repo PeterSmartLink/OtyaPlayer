@@ -30,6 +30,24 @@ void main() {
     );
   });
 
+  test('existing installs receive one non-repeating notification prompt', () {
+    final app = File('lib/app/app.dart').readAsStringSync();
+    final notifications = File(
+      'lib/core/services/notification_service.dart',
+    ).readAsStringSync();
+
+    expect(app, contains('requestPermissionOnce()'));
+    expect(
+      notifications,
+      contains("notification_permission_prompted_v1"),
+    );
+    expect(
+      notifications,
+      contains('if (prefs.getBool(_permissionPromptKey) == true) return null'),
+    );
+    expect(notifications, contains('prefs.setBool(_permissionPromptKey, true)'));
+  });
+
   test('remote notification links are limited to official HTTPS hosts', () {
     final fcm = File('lib/core/services/fcm_service.dart').readAsStringSync();
     final push = File(

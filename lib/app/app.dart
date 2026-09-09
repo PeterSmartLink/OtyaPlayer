@@ -103,6 +103,8 @@ class _OtyaPlayerAppState extends ConsumerState<OtyaPlayerApp> {
       final updateContext = AppRouter.navigatorKey.currentContext;
       if (!mounted || updateContext == null || !updateContext.mounted) return;
       await UpdateDialog.checkAndShow(updateContext);
+      if (!mounted) return;
+      await _requestNotificationPermissionSafely();
     } catch (_) {
       // Startup notices are non-critical. Local playback and navigation must
       // remain available even when a remote announcement/update check fails.
@@ -154,7 +156,7 @@ class _OtyaPlayerAppState extends ConsumerState<OtyaPlayerApp> {
 
   Future<void> _requestNotificationPermissionSafely() async {
     try {
-      await NotificationService.instance.requestPermission();
+      await NotificationService.instance.requestPermissionOnce();
     } catch (_) {}
   }
 
