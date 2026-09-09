@@ -29,6 +29,8 @@ class ConnectivityService {
   bool get isOnline => !_isOffline;
 
   StreamSubscription<List<ConnectivityResult>>? _sub;
+  Future<void>? _initInFlight;
+  bool _initialized = false;
 
   // Broadcast stream so multiple widgets can listen.
   final StreamController<bool> _offlineController =
@@ -38,7 +40,19 @@ class ConnectivityService {
   Stream<bool> get offlineStream => _offlineController.stream;
 
   /// Initialize the service. Call once from main() or _initBackground().
-  Future<void> init() async {
+  Future<void> init() {
+    if (_initialized) return Future<void>.value();
+    final existing = _initInFlight;
+    if (existing != null) return existing;
+
+    final attempt = _initOnce();
+    _initInFlight = attempt;
+    return attempt.whenComplete(() {
+      if (identical(_initInFlight, attempt)) _initInFlight = null;
+    });
+  }
+
+  Future<void> _initOnce() async {
     // Perform an immediate check so isOffline is accurate before the first
     // stream event arrives.
     await _checkNow();
@@ -51,6 +65,7 @@ class ConnectivityService {
         debugPrint('[Connectivity] ${offline ? "OFFLINE" : "ONLINE"}');
       }
     });
+    _initialized = true;
   }
 
   Future<void> _checkNow() async {
@@ -75,6 +90,8 @@ class ConnectivityService {
 
   void dispose() {
     _sub?.cancel();
+    _sub = null;
+    _initialized = false;
     _offlineController.close();
   }
 }

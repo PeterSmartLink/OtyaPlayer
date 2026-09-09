@@ -69,4 +69,31 @@ void main() {
     expect(device, isNot(contains(r'${response.body}')));
     expect(feedback, isNot(contains(r'${res.body}')));
   });
+
+  test('crash telemetry is redacted before local persistence', () {
+    final reporter =
+        File('lib/core/services/crash_reporter.dart').readAsStringSync();
+
+    expect(reporter, contains('_sanitizeTelemetry(description)'));
+    expect(reporter, contains('_sanitizeTelemetry(stack.toString())'));
+    expect(reporter, contains('<redacted-jwt>'));
+    expect(reporter, contains('<redacted-email>'));
+    expect(
+      reporter.indexOf('_sanitizeTelemetry(description)'),
+      lessThan(reporter.indexOf("'description': safeDescription")),
+    );
+  });
+
+  test('Now Playing artwork never follows or downloads cleartext URLs', () {
+    final notifications = File(
+      'lib/core/services/media_notification_service.dart',
+    ).readAsStringSync();
+
+    expect(notifications, contains('request.followRedirects = false'));
+    expect(notifications, contains("parsed.scheme == 'https'"));
+    expect(
+      notifications,
+      isNot(contains("parsed.scheme == 'https' || parsed.scheme == 'http'")),
+    );
+  });
 }

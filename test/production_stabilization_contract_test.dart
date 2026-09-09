@@ -160,4 +160,14 @@ void main() {
     expectNotContains(provider, 'getRecentlyPlayed(limit: 9999)');
     expectNotContains(provider, 'seedLibraryItem(');
   });
+
+  test('connectivity initialization coalesces concurrent startup calls', () {
+    final connectivity =
+        File('lib/core/services/connectivity_service.dart').readAsStringSync();
+
+    expect(connectivity, contains('Future<void>? _initInFlight'));
+    expect(connectivity, contains('if (_initialized)'));
+    expect(connectivity, contains('if (existing != null) return existing'));
+    expect(connectivity, contains('_initialized = true'));
+  });
 }

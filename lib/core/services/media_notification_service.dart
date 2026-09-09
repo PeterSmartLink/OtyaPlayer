@@ -121,6 +121,9 @@ class MediaNotificationService {
     File? part;
     try {
       final request = http.Request('GET', uri);
+      // Do not let an artwork host redirect a background request to cleartext
+      // HTTP or to a destination OTYA did not validate.
+      request.followRedirects = false;
       final response =
           await client.send(request).timeout(const Duration(seconds: 6));
       if (response.statusCode != HttpStatus.ok) return null;
@@ -182,9 +185,10 @@ class MediaNotificationService {
     if (resolved == null || resolved.isEmpty) return null;
 
     final parsed = Uri.tryParse(resolved);
-    if (parsed != null && (parsed.scheme == 'https' || parsed.scheme == 'http')) {
+    if (parsed != null && parsed.scheme == 'https') {
       return _cacheRemoteArtwork(parsed, id);
     }
+    if (parsed != null && parsed.hasScheme) return null;
 
     final source = File(resolved);
     if (!await source.exists()) return null;

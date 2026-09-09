@@ -90,19 +90,21 @@ class CrashReporter {
 
       final deviceId = await DeviceService.instance.getDeviceId();
       final packageInfo = await PackageInfo.fromPlatform();
+      final safeDescription = _sanitizeTelemetry(description);
+      final safeStack = stack == null
+          ? ''
+          : _sanitizeTelemetry(stack.toString());
       final crash = <String, dynamic>{
         'device_id': deviceId,
         'app_version': packageInfo.version,
         'version_code': int.tryParse(packageInfo.buildNumber) ?? 0,
         'error_type': errorType,
-        'description': description.length > 500
-            ? description.substring(0, 500)
-            : description,
-        'stack_trace': stack != null
-            ? (stack.toString().length > 1000
-                ? stack.toString().substring(0, 1000)
-                : stack.toString())
-            : '',
+        'description': safeDescription.length > 500
+            ? safeDescription.substring(0, 500)
+            : safeDescription,
+        'stack_trace': safeStack.length > 1000
+            ? safeStack.substring(0, 1000)
+            : safeStack,
         'timestamp': now.toIso8601String(),
       };
       await _appendToPending(crash);
@@ -114,6 +116,41 @@ class CrashReporter {
 
   static Future<void> reportManual(String errorType, String description) async {
     await CrashReporter.instance.recordCrash(errorType, description, null);
+  }
+
+  /// Crash text can include HTTP headers, URLs, form values, or user paths.
+  /// Redact common credentials and direct identifiers before the report is
+  /// persisted to SharedPreferences as well as before it reaches the server.
+  String _sanitizeTelemetry(String value) {
+    var sanitized = value.replaceAll(
+      RegExp(r'Bearer\s+[A-Za-z0-9._~+/=-]+', caseSensitive: false),
+      'Bearer <redacted>',
+    );
+    sanitized = sanitized.replaceAll(
+      RegExp(r'\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b'),
+      '<redacted-jwt>',
+    );
+    sanitized = sanitized.replaceAll(
+      RegExp(
+        r'\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b',
+        caseSensitive: false,
+      ),
+      '<redacted-email>',
+    );
+    sanitized = sanitized.replaceAllMapped(
+      RegExp(
+        r'''(["']?(?:access_token|refresh_token|id_token|password|api_key)["']?\s*[:=]\s*)["']?[^\s,"'}&]+''',
+        caseSensitive: false,
+      ),
+      (match) => '${match.group(1)}<redacted>',
+    );
+    return sanitized.replaceAllMapped(
+      RegExp(
+        r'([?&](?:token|key|code|secret|password)=)[^&#\s]+',
+        caseSensitive: false,
+      ),
+      (match) => '${match.group(1)}<redacted>',
+    );
   }
 
   void report(Object error, StackTrace stack) {
