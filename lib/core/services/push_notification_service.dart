@@ -37,6 +37,7 @@ class PushNotificationService {
 
   void handleTap(NotificationResponse response) {
     WidgetsBinding.instance.addPostFrameCallback((_) => _onTap(response));
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   bool _isOfficialUpdateUri(Uri? uri) {

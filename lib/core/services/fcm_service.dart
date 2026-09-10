@@ -137,6 +137,7 @@ class FcmService {
   Future<void> syncRegistration() async {
     if (!OtyaFirebaseConfig.configured || !Platform.isAndroid) return;
     try {
+      if (!await FirebasePlatformService.instance.ensureInitialized()) return;
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString(_keyFcmToken) ??
           await FirebaseMessaging.instance.getToken();
@@ -249,7 +250,8 @@ class FcmService {
       }
     }
 
-    final rawUrl = message.data['url']?.toString();
+    final rawUrl = message.data['download_url']?.toString() ??
+        message.data['url']?.toString();
     if (rawUrl == null || rawUrl.isEmpty) return;
 
     // Compatibility for local-notification payloads that contain an OTYA URI.

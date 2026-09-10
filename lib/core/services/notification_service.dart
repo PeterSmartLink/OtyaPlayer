@@ -16,6 +16,7 @@ class NotificationService {
 
   static const _officialHost = 'petersmartlink.com';
   static const _permissionPromptKey = 'notification_permission_prompted_v1';
+  Future<bool?>? _permissionPromptInFlight;
 
   Future<void> init() async {
     await initSharedNotificationsPlugin();
@@ -37,6 +38,20 @@ class NotificationService {
   /// Gives upgraded Android 13+ installs the same one-time notification choice
   /// as newly onboarded users without prompting again on every app launch.
   Future<bool?> requestPermissionOnce() async {
+    final existing = _permissionPromptInFlight;
+    if (existing != null) return existing;
+    final attempt = _requestPermissionOnce();
+    _permissionPromptInFlight = attempt;
+    try {
+      return await attempt;
+    } finally {
+      if (identical(_permissionPromptInFlight, attempt)) {
+        _permissionPromptInFlight = null;
+      }
+    }
+  }
+
+  Future<bool?> _requestPermissionOnce() async {
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool(_permissionPromptKey) == true) return null;
 
@@ -51,11 +66,12 @@ class NotificationService {
 
   void _onNotificationResponse(NotificationResponse response) {
     debugPrint(
-      '[Notifications] Tapped: id=${response.id} payload=${response.payload}',
+      '[Notifications] Tapped: id=${response.id}',
     );
     final payload = response.payload;
     if (payload != null && payload.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _openPayload(payload));
+      WidgetsBinding.instance.ensureVisualUpdate();
     }
   }
 
@@ -89,6 +105,7 @@ class NotificationService {
     required String body,
     required int progress,
   }) async {
+    await initSharedNotificationsPlugin();
     final safeProgress = progress.clamp(0, 100).toInt();
     final androidDetails = AndroidNotificationDetails(
       'com.otyaplayer.app.tools.progress',
@@ -116,6 +133,7 @@ class NotificationService {
     required String body,
     String? payload,
   }) async {
+    await initSharedNotificationsPlugin();
     const androidDetails = AndroidNotificationDetails(
       'com.otyaplayer.app.tools.complete',
       'Otya Tools — Complete',
@@ -139,6 +157,7 @@ class NotificationService {
     required String body,
     String? payload,
   }) async {
+    await initSharedNotificationsPlugin();
     const androidDetails = AndroidNotificationDetails(
       'com.otyaplayer.app.tools.error',
       'Otya Tools — Error',

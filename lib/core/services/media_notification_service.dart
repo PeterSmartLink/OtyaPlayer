@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
 
@@ -7,7 +8,6 @@ import 'package:path_provider/path_provider.dart';
 
 import 'album_art_service.dart';
 import 'audio_handler.dart';
-import 'shared_notification_plugin.dart';
 
 /// Owns system Now Playing metadata for notification shade, lock screen,
 /// Bluetooth/headset controls and Android media surfaces.
@@ -67,7 +67,7 @@ class MediaNotificationService {
 
   Future<void> init() async {
     if (_initialized) return;
-    await initSharedNotificationsPlugin();
+    // MediaSession must remain available if ordinary notification setup fails.
     // A startup AudioService failure must not become permanent. The registered
     // initializer is idempotent and coalesces concurrent attempts.
     await AudioHandlerSingleton.instance.ensureReady();
@@ -118,6 +118,9 @@ class MediaNotificationService {
     }
 
     final client = http.Client();
+    // Bound the complete transfer, including a server that sends tiny chunks
+    // often enough to avoid the stream inactivity timeout.
+    final deadline = Timer(const Duration(seconds: 12), client.close);
     File? part;
     try {
       final request = http.Request('GET', uri);
@@ -144,7 +147,7 @@ class MediaNotificationService {
       final sink = part.openWrite(mode: FileMode.writeOnly);
       var received = 0;
       try {
-        await for (final chunk in response.stream) {
+        await for (final chunk in response.stream.timeout(const Duration(seconds: 6))) {
           received += chunk.length;
           if (received > _maxArtworkBytes) {
             throw const _ArtworkTooLargeException();
@@ -172,6 +175,7 @@ class MediaNotificationService {
       debugPrint('[MediaNotification] remote artwork unavailable: $e');
       return null;
     } finally {
+      deadline.cancel();
       client.close();
       try {
         if (part != null && await part.exists()) await part.delete();

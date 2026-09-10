@@ -102,7 +102,7 @@ class MainActivity : AudioServiceFragmentActivity() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val channel = android.app.NotificationChannel(
             "com.otyaplayer.app.audio",
-            "OTYA — Now Playing",
+            "Otya — Now Playing",
             android.app.NotificationManager.IMPORTANCE_LOW,
         ).apply {
             description = "Media playback controls and lock screen notification"

@@ -3,6 +3,14 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('media session is independent of ordinary notification setup', () {
+    final source = File('lib/core/services/media_notification_service.dart')
+        .readAsStringSync();
+    expect(source, isNot(contains('initSharedNotificationsPlugin')));
+    expect(source, contains('response.stream.timeout'));
+    expect(source, contains('Timer(const Duration(seconds: 12), client.close)'));
+    expect(source, contains('deadline.cancel()'));
+  });
   test('stale artwork resolution cannot publish old Now Playing metadata', () {
     final source = File('lib/core/services/media_notification_service.dart')
         .readAsStringSync();

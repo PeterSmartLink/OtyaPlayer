@@ -14,9 +14,22 @@ import 'push_notification_service.dart';
 
 final sharedNotificationsPlugin = FlutterLocalNotificationsPlugin();
 bool _sharedPluginInitialized = false;
+Future<void>? _sharedPluginInit;
 
 Future<void> initSharedNotificationsPlugin() async {
   if (_sharedPluginInitialized) return;
+  final existing = _sharedPluginInit;
+  if (existing != null) return existing;
+  final attempt = _initializeSharedNotificationsPlugin();
+  _sharedPluginInit = attempt;
+  try {
+    await attempt;
+  } finally {
+    if (identical(_sharedPluginInit, attempt)) _sharedPluginInit = null;
+  }
+}
+
+Future<void> _initializeSharedNotificationsPlugin() async {
   const androidSettings =
       AndroidInitializationSettings('@drawable/ic_notification');
   await sharedNotificationsPlugin.initialize(

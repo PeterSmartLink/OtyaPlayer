@@ -3,6 +3,22 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('notification startup coalesces concurrent callers', () {
+    final source = File('lib/core/services/shared_notification_plugin.dart')
+        .readAsStringSync();
+    expect(source, contains('final existing = _sharedPluginInit'));
+    expect(source, contains('if (existing != null) return existing'));
+    expect(source, contains('identical(_sharedPluginInit, attempt)'));
+  });
+
+  test('notification taps schedule a frame even while the UI is idle', () {
+    for (final path in [
+      'lib/core/services/notification_service.dart',
+      'lib/core/services/push_notification_service.dart',
+    ]) {
+      expect(File(path).readAsStringSync(), contains('ensureVisualUpdate()'));
+    }
+  });
   test('ordinary notification channels exist before background delivery', () {
     final source = File(
       'lib/core/services/shared_notification_plugin.dart',
