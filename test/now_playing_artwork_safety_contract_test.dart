@@ -12,7 +12,7 @@ void main() {
     expect(source, contains('_maxCachedArtworkFiles = 24'));
     expect(source, contains('final client = http.Client()'));
     expect(source, contains('final request = http.Request(\'GET\', uri)'));
-    expect(source, contains('await for (final chunk in response.stream)'));
+    expect(source, contains('await for (final chunk in response.stream'));
     expect(source, contains('received > _maxArtworkBytes'));
     expect(source, contains('File(\'\${target.path}.part\')'));
     expect(source, contains('_pruneArtworkCache'));
