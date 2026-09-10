@@ -55,7 +55,7 @@ void main() {
     expect(app, contains('requestPermissionOnce()'));
     expect(
       notifications,
-      contains("notification_permission_prompted_v1"),
+      contains('notification_permission_prompted_v1'),
     );
     expect(
       notifications,
