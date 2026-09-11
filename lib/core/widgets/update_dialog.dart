@@ -1,16 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutter/services.dart';
+
+import '../config/environment.dart';
 
 import '../../shared/widgets/otya_logo.dart';
 import '../services/update_service.dart';
 
-/// Single-purpose Otya update dialog.
-///
-/// Otya intentionally does not install APKs itself. Google Play restricts the
-/// REQUEST_INSTALL_PACKAGES permission for self-update use, and local playback
-/// must not depend on a privileged installer path. The app checks canonical
-/// release metadata, explains the update, and hands the user to the official
-/// HTTPS update destination in their browser.
+/// Download official direct-install updates without opening a web page.
+/// Android manages the background download and asks the user to install it.
 class UpdateDialog extends StatefulWidget {
   const UpdateDialog({super.key, required this.info});
   final UpdateInfo info;
@@ -26,12 +23,12 @@ class UpdateDialog extends StatefulWidget {
     final update = await UpdateService.instance.checkForUpdate(force: forceCheck);
     if (update == null || !context.mounted) {
       if (forceCheck && context.mounted) {
+        final service = UpdateService.instance;
+        final message = service.lastState == UpdateCheckState.current
+            ? 'Otya is up to date.'
+            : service.lastError ?? 'Could not check for updates. Please try again.';
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Otya is up to date, or the update service is unavailable.',
-            ),
-          ),
+          SnackBar(content: Text(message)),
         );
       }
       return;
@@ -64,6 +61,8 @@ class _UpdateDialogState extends State<UpdateDialog> {
     'www.petersmartlink.com',
   };
 
+  static const _downloads = MethodChannel('com.otyaplayer.app/updates');
+  bool _downloadStarted = false;
   bool _opening = false;
   String? _error;
 
@@ -74,8 +73,9 @@ class _UpdateDialogState extends State<UpdateDialog> {
       _error = null;
     });
 
-    final uri = Uri.tryParse(widget.info.downloadUrl);
-    if (uri == null ||
+    final uri = Uri.tryParse(widget.info.directUrl);
+    if (!Environment.selfUpdateEnabled ||
+        uri == null ||
         uri.scheme != 'https' ||
         !_officialHosts.contains(uri.host.toLowerCase()) ||
         uri.userInfo.isNotEmpty) {
@@ -88,13 +88,26 @@ class _UpdateDialogState extends State<UpdateDialog> {
       return;
     }
 
-    final router = GoRouter.of(context);
-    Navigator.of(context).pop();
-    await Future<void>.delayed(Duration.zero);
-    router.push(
-      '/webview',
-      extra: {'url': uri.toString(), 'title': 'Update Otya'},
-    );
+    try {
+      if (_downloadStarted) {
+        await _downloads.invokeMethod<void>('showDownloads');
+      } else {
+        final id = await _downloads.invokeMethod<int>('download', {
+          'url': uri.toString(),
+          'tag': widget.info.tag,
+        });
+        if (id == null) throw StateError('Download was not accepted');
+        if (mounted) setState(() => _downloadStarted = true);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _error = 'The update download could not be opened. Please try again.';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _opening = false);
+    }
   }
 
   Future<void> _later() async {
@@ -145,8 +158,11 @@ class _UpdateDialogState extends State<UpdateDialog> {
             ],
             const SizedBox(height: 14),
             Text(
-              'Otya opens the official PeterSmart Link update page inside the app. '
-              'When you choose the APK, Android handles the download/install step; Otya never silently installs packages.',
+              _downloadStarted
+                  ? 'Your download is managed by Android and can continue in the background. '
+                      'When it finishes, tap its notification to open the update.'
+                  : 'Download the update here, then approve installation in Android. '
+                      'Otya never silently installs packages.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             if (_error != null) ...[
@@ -179,8 +195,10 @@ class _UpdateDialogState extends State<UpdateDialog> {
                   dimension: 18,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Icon(Icons.open_in_new_rounded),
-          label: Text(_opening ? 'Opening…' : 'View update'),
+              : const Icon(Icons.download_rounded),
+          label: Text(_opening
+              ? 'Opening…'
+              : _downloadStarted ? 'View download' : 'Download update'),
         ),
       ],
     );

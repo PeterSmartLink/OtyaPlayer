@@ -84,6 +84,7 @@ class MainActivity : AudioServiceFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        UpdateDownloads(this).register(flutterEngine.dartExecutor.binaryMessenger)
         createAudioNotificationChannel()
         configurePip(flutterEngine)
         configureMediaStore(flutterEngine)

@@ -72,7 +72,7 @@ void main() {
       updates,
       contains('Updates for this build are managed by Google Play.'),
     );
-    expect(dialog, contains("router.push(\n      '/webview'"));
+    expect(dialog, contains("invokeMethod<int>('download'"));
     expect(dialog, isNot(contains('LaunchMode.externalApplication')));
   });
 }

@@ -79,7 +79,7 @@ void main() {
     expect(update, contains("uri.scheme != 'https'"));
     expect(update, contains('_officialHosts.contains(uri.host.toLowerCase())'));
     expect(update, contains('Otya never silently installs packages'));
-    expect(update, contains("router.push(\n      '/webview'"));
+    expect(update, contains("invokeMethod<int>('download'"));
     expect(update, contains('const OtyaMark(size: 46)'));
     expect(update, isNot(contains('Color(0xFF8173F2)')));
   });

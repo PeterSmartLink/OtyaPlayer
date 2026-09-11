@@ -1,23 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  OTYA notification icon.
-  Android small-notification icons must be a single-color silhouette on a
-  transparent background. Reuse the OTYA monochrome mark so playback, push and
-  local notifications share one recognizable identity without a colored tile.
--->
+<!-- Current Otya ribbon mark, simplified to an Android monochrome silhouette. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="512"
-    android:viewportHeight="512">
-
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M160,98 L138,117 L116,146 L100,179 L89,220 L108,180 L129,158 L141,150 L165,140 L186,136 L211,136 L241,142 L270,155 L292,171 L315,196 L327,216 L337,248 L338,280 L333,307 L324,329 L354,307 L373,286 L389,262 L402,231 L406,209 L405,183 L399,159 L373,120 L350,99 L330,86 L303,74 L272,67 L240,67 L211,73 L181,85 Z" />
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M180,142 L159,147 L139,157 L116,177 L105,192 L89,232 L89,283 L102,328 L113,349 L133,376 L152,395 L174,409 L191,414 L219,414 L249,405 L276,389 L298,368 L316,338 L285,355 L267,359 L247,359 L216,348 L192,325 L181,305 L173,272 L175,239 L188,207 L209,185 L236,172 L264,169 L291,175 L273,162 L242,148 L215,142 Z" />
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M405,164 L410,190 L408,224 L395,260 L373,293 L348,318 L321,337 L301,371 L269,399 L248,410 L226,417 L184,417 L210,428 L234,433 L256,434 L289,430 L320,420 L343,408 L382,374 L412,329 L423,298 L427,275 L428,246 L425,220 L417,190 Z" />
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="512" android:viewportHeight="512">
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M147,279 L147,164 C147,83 230,78 256,141 C277,192 279,255 291,290 C301,321 321,326 345,309 C304,338 287,315 277,277 C260,212 250,187 230,187 C198,186 164,229 147,279 Z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M148,303 C156,264 190,222 218,224 C250,225 256,271 268,313 C280,357 307,360 340,338 C328,367 307,389 279,402 C252,414 228,410 205,406 C169,400 144,382 147,344 Z M270,149 C302,170 322,190 347,202 C393,224 410,254 392,288 C373,324 335,347 309,329 C339,318 337,287 324,254 C311,220 291,178 270,149 Z" />
 </vector>

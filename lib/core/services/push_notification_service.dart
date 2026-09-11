@@ -4,14 +4,13 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/router.dart';
+import '../widgets/update_dialog.dart';
 import 'shared_notification_plugin.dart';
 
 /// Push/announcement notification owner for Otya.
 ///
-/// Update notifications never download or install an APK inside the app. A tap
-/// opens only an HTTPS destination on an official PeterSmart Link host in the
-/// external browser, preserving the same Play-safe update contract as the
-/// in-app update dialog.
+/// Update taps recheck release metadata and open the native update dialog.
+/// Download and installation remain explicit user actions.
 class PushNotificationService {
   PushNotificationService._();
   static final PushNotificationService instance = PushNotificationService._();
@@ -58,7 +57,10 @@ class PushNotificationService {
       final rawUrl = payload.substring(_prefixUpdate.length).trim();
       final uri = Uri.tryParse(rawUrl);
       if (_isOfficialUpdateUri(uri)) {
-        launchUrl(uri!, mode: LaunchMode.externalApplication).ignore();
+        final context = AppRouter.navigatorKey.currentContext;
+        if (context != null && context.mounted) {
+          UpdateDialog.checkAndShow(context, forceCheck: true).ignore();
+        }
       } else if (rawUrl.isNotEmpty) {
         debugPrint('[PushNotif] blocked untrusted update URL.');
       }
