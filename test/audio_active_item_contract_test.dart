@@ -3,6 +3,27 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('audio screen teardown never reads its detached Riverpod ref', () {
+    final source = File(
+      'lib/features/player/presentation/audio_player_screen.dart',
+    ).readAsStringSync();
+    final screen = source.split('class _AudioPlayerScreenState').last;
+    final dispose = screen
+        .split('void dispose() {').last
+        .split('void _showQueue()').first;
+
+    expect(dispose, isNot(contains('ref.read')));
+    expect(dispose, isNot(contains('_activeItem')));
+    expect(
+      dispose.indexOf('removeObserver(this)'),
+      lessThan(dispose.indexOf('saveCurrentPosition()')),
+    );
+    expect(
+      screen,
+      contains('addPostFrameCallback((_) {\n      if (!mounted) return;'),
+    );
+  });
+
   test('full audio player follows the active queue item after skips', () {
     final screen = File(
       'lib/features/player/presentation/audio_player_screen.dart',
@@ -23,7 +44,8 @@ void main() {
     expect(player, contains("activeItem.artist ?? 'Unknown Artist'"));
     expect(player, contains('[XFile(activeItem.filePath)]'));
     expect(screen, contains('_startLoad(activeItem);'));
-    expect(screen, contains('savePosition(_activeItem.id)'));
+    expect(screen, contains('_playerNotifier.saveCurrentPosition()'));
+    expect(screen, contains('final id = _currentItemId;'));
   });
 
   test('album art resolution ignores stale async completions', () {

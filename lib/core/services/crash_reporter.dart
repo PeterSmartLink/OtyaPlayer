@@ -40,7 +40,7 @@ class CrashReporter {
     FlutterError.onError = (FlutterErrorDetails details) {
       recordCrash(
         'FlutterError',
-        details.summary.toString(),
+        details.exceptionAsString(),
         details.stack,
       ).ignore();
       if (previousFlutterHandler != null) {

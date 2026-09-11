@@ -383,6 +383,12 @@ class AudioPlayerNotifier extends StateNotifier<AudioPlayerState> {
   void savePosition(String id) =>
       OtyaDatabase.instance.saveSeekPosition(id, state.position);
 
+  void saveCurrentPosition() {
+    if (!mounted) return;
+    final id = _currentItemId;
+    if (id != null) savePosition(id);
+  }
+
   @override
   void dispose() {
     _playingSub?.cancel();
@@ -427,6 +433,7 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen>
     with WidgetsBindingObserver {
   bool _showRetry = false;
   Timer? _loadTimeoutTimer;
+  late final AudioPlayerNotifier _playerNotifier;
 
   MediaItem get _activeItem =>
       ref.read(miniPlayerItemProvider) ?? widget.mediaItem;
@@ -449,24 +456,27 @@ class _AudioPlayerScreenState extends ConsumerState<AudioPlayerScreen>
   @override
   void initState() {
     super.initState();
+    _playerNotifier = ref.read(audioPlayerProvider.notifier);
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       if (!widget.resumeOnly) _startLoad(widget.mediaItem);
     });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) {
-      ref.read(audioPlayerProvider.notifier).savePosition(_activeItem.id);
+    if (mounted && state == AppLifecycleState.paused) {
+      _playerNotifier.saveCurrentPosition();
     }
   }
 
   @override
   void dispose() {
-    _loadTimeoutTimer?.cancel();
-    ref.read(audioPlayerProvider.notifier).savePosition(_activeItem.id);
+    // Riverpod has already detached this screen's ref during unmount.
     WidgetsBinding.instance.removeObserver(this);
+    _loadTimeoutTimer?.cancel();
+    _playerNotifier.saveCurrentPosition();
     super.dispose();
   }
 
