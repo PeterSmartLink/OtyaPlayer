@@ -9,8 +9,9 @@ import '../database/otya_database.dart';
 import '../models/playlist.dart';
 import 'auth_service.dart';
 import 'http_client.dart';
+import '../config/environment.dart';
 
-const _kAuthBase = 'https://petersmartlink.com/auth';
+const _kAuthBase = Environment.authUrl;
 const _kBackupSchemaVersion = 1;
 const _kBackupPayloadType = 'otya_recovery_snapshot';
 const _kMaxPlaylists = 5000;
@@ -45,7 +46,7 @@ class BackupService {
 
   Future<void> backup(Map<String, dynamic> data, String driveAccessToken) async {
     final token = await AuthService.instance.getValidToken();
-    if (token == null) throw Exception('Please sign in to OTYA first.');
+    if (token == null) throw Exception('Please sign in to Otya first.');
     final res = await _client.post(
       Uri.parse('$_kAuthBase/backup'),
       headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
@@ -58,12 +59,14 @@ class BackupService {
 
   Future<Map<String, dynamic>?> restore(String driveAccessToken) async {
     final token = await AuthService.instance.getValidToken();
-    if (token == null) throw Exception('Please sign in to OTYA first.');
-    final uri = Uri.parse('$_kAuthBase/backup')
-        .replace(queryParameters: {'drive_token': driveAccessToken});
+    if (token == null) throw Exception('Please sign in to Otya first.');
+    final uri = Uri.parse('$_kAuthBase/backup');
     final res = await _client.get(
       uri,
-      headers: {'Authorization': 'Bearer $token'},
+      headers: {
+        'Authorization': 'Bearer $token',
+        'X-Otya-Drive-Token': driveAccessToken,
+      },
     ).timeout(_timeout);
     if (res.statusCode != 200) {
       throw Exception(_errorMessage(res, 'Restore failed'));
@@ -79,7 +82,7 @@ class BackupService {
 
   Future<void> deleteBackup(String driveAccessToken) async {
     final token = await AuthService.instance.getValidToken();
-    if (token == null) throw Exception('Please sign in to OTYA first.');
+    if (token == null) throw Exception('Please sign in to Otya first.');
     final res = await _client.delete(
       Uri.parse('$_kAuthBase/backup'),
       headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},

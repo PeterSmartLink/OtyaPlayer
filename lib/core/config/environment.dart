@@ -56,7 +56,13 @@ abstract final class Environment {
   static const String arm64DownloadUrl = '$workerUrl/apk/arm64';
   static const String arm32DownloadUrl = '$workerUrl/apk/arm32';
   static const String downloadUrl = '$workerUrl/download/otya-player';
-  static const String docsUrl = '$publicSiteUrl/docs';
+  static const String docsUrl = String.fromEnvironment(
+    'DOCS_URL',
+    defaultValue: 'https://docs.petersmartlink.com',
+  );
+  static const String authUrl = '$workerUrl/auth';
+  static const String appConfigUrl = '$workerUrl/api/app-config';
+  static const String themesUrl = '$workerUrl/api/themes';
   static const String downloadPageUrl = '$publicSiteUrl/download/otya-player';
 
   /// Self-installing APK updates are opt-in. Keep disabled by default so a

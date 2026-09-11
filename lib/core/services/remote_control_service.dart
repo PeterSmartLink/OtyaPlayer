@@ -6,12 +6,13 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'http_client.dart';
+import '../config/environment.dart';
 
 class RemoteControlService extends ChangeNotifier {
   RemoteControlService._();
   static final RemoteControlService instance = RemoteControlService._();
 
-  static const _url = 'https://petersmartlink.com/api/app-config';
+  static const _url = Environment.appConfigUrl;
   static const _cacheKey = 'otya_remote_control_cache_v1';
   static const _bucketSeedKey = 'otya_remote_bucket_seed_v1';
   static const _seenAnnouncementPrefix = 'otya_remote_announcement_seen_';
@@ -19,6 +20,7 @@ class RemoteControlService extends ChangeNotifier {
   Map<String, dynamic> _config = const {};
   bool _loaded = false;
   bool _onlineFresh = false;
+  Future<bool>? _refreshInFlight;
   String _bucketSeed = 'otya-default';
 
   bool get loaded => _loaded;
@@ -45,6 +47,19 @@ class RemoteControlService extends ChangeNotifier {
   }
 
   Future<bool> refreshFromServer() async {
+    final existing = _refreshInFlight;
+    if (existing != null) return existing;
+    final attempt = _refresh();
+    _refreshInFlight = attempt;
+    try {
+      return await attempt;
+    } finally {
+      if (identical(_refreshInFlight, attempt)) _refreshInFlight = null;
+    }
+  }
+
+  Future<bool> _refresh() async {
+    var receivedFreshConfig = false;
     try {
       final timeoutSeconds = _int(runtime['apiTimeoutSeconds'], 8).clamp(4, 30);
       final response = await AppHttpClient.instance.client
@@ -62,15 +77,21 @@ class RemoteControlService extends ChangeNotifier {
       final config = decoded['config'];
       if (config is! Map<String, dynamic>) return false;
       _config = config;
-      _onlineFresh = true;
+      receivedFreshConfig = true;
       _loaded = true;
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_cacheKey, jsonEncode(_config));
-      notifyListeners();
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_cacheKey, jsonEncode(_config));
+      } catch (_) {
+        debugPrint('[RemoteControl] Could not cache current configuration.');
+      }
       return true;
-    } catch (e) {
-      debugPrint('[RemoteControl] Refresh failed: $e');
+    } catch (_) {
+      debugPrint('[RemoteControl] Refresh failed; using saved configuration.');
       return false;
+    } finally {
+      _onlineFresh = receivedFreshConfig;
+      notifyListeners();
     }
   }
 

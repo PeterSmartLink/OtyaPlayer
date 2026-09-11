@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import 'http_client.dart';
+import '../config/environment.dart';
 
 class OnlineTheme {
   const OnlineTheme({
@@ -122,7 +123,7 @@ class OnlineTheme {
 class OnlineThemeService {
   OnlineThemeService._();
 
-  static const _catalogUrl = 'https://petersmartlink.com/api/themes';
+  static const _catalogUrl = Environment.themesUrl;
 
   static Future<List<OnlineTheme>> fetchCatalog() async {
     try {

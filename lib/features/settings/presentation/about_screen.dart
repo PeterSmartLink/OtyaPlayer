@@ -76,7 +76,7 @@ class _AboutScreenState extends State<AboutScreen> {
               _NavTile(
                 icon: Icons.email_outlined,
                 label: 'Email support',
-                subtitle: 'support@petersmartlink.com',
+                subtitle: Environment.supportEmail,
                 onTap: () => _launchEmail(context),
               ),
             ],
@@ -223,7 +223,7 @@ class _AboutScreenState extends State<AboutScreen> {
   }) async {
     final uri = Uri(
       scheme: 'mailto',
-      path: 'support@petersmartlink.com',
+      path: Environment.supportEmail,
       queryParameters: {'subject': subject},
     );
     if (!await launchUrl(uri) && context.mounted) {
