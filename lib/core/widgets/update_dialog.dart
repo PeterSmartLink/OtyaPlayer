@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -5,6 +7,7 @@ import '../config/environment.dart';
 
 import '../../shared/widgets/otya_logo.dart';
 import '../services/update_service.dart';
+import '../services/update_download_status.dart';
 
 /// Download official direct-install updates without opening a web page.
 /// Android manages the background download and asks the user to install it.
@@ -55,7 +58,7 @@ class UpdateDialog extends StatefulWidget {
   State<UpdateDialog> createState() => _UpdateDialogState();
 }
 
-class _UpdateDialogState extends State<UpdateDialog> {
+class _UpdateDialogState extends State<UpdateDialog> with WidgetsBindingObserver {
   static const _officialHosts = <String>{
     'petersmartlink.com',
     'www.petersmartlink.com',
@@ -63,11 +66,69 @@ class _UpdateDialogState extends State<UpdateDialog> {
 
   static const _downloads = MethodChannel('com.otyaplayer.app/updates');
   bool _downloadStarted = false;
+  UpdateDownloadStatus _status = const UpdateDownloadStatus();
+  Timer? _statusTimer;
+  bool _polling = false;
+  int _statusGeneration = 0;
   bool _opening = false;
   String? _error;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    if (Environment.selfUpdateEnabled) _startStatusUpdates();
+  }
+
+  void _startStatusUpdates() {
+    _statusTimer?.cancel();
+    unawaited(_refreshStatus());
+    _statusTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (_status.isActive) unawaited(_refreshStatus());
+    });
+  }
+
+  Future<void> _refreshStatus() async {
+    if (_polling || _opening || !mounted) return;
+    _polling = true;
+    final generation = _statusGeneration;
+    try {
+      final result = await _downloads.invokeMapMethod<Object?, Object?>(
+        'status', {'tag': widget.info.tag},
+      );
+      if (!mounted || generation != _statusGeneration || result == null) return;
+      final status = UpdateDownloadStatus.fromMap(result);
+      setState(() {
+        _status = status;
+        _downloadStarted = status.isActive || status.isComplete;
+      });
+    } catch (_) {
+      // Keep the previous state; a status-query error is not download failure.
+    } finally {
+      _polling = false;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!Environment.selfUpdateEnabled) return;
+    if (state == AppLifecycleState.resumed) {
+      _startStatusUpdates();
+    } else {
+      _statusTimer?.cancel();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _statusTimer?.cancel();
+    super.dispose();
+  }
+
   Future<void> _openOfficialUpdate() async {
     if (_opening) return;
+    _statusGeneration++;
     setState(() {
       _opening = true;
       _error = null;
@@ -97,7 +158,12 @@ class _UpdateDialogState extends State<UpdateDialog> {
           'tag': widget.info.tag,
         });
         if (id == null) throw StateError('Download was not accepted');
-        if (mounted) setState(() => _downloadStarted = true);
+        if (mounted) {
+          setState(() {
+            _downloadStarted = true;
+            _status = const UpdateDownloadStatus(status: 'pending');
+          });
+        }
       }
     } catch (_) {
       if (mounted) {
@@ -106,7 +172,10 @@ class _UpdateDialogState extends State<UpdateDialog> {
         });
       }
     } finally {
-      if (mounted) setState(() => _opening = false);
+      if (mounted) {
+        setState(() => _opening = false);
+        unawaited(_refreshStatus());
+      }
     }
   }
 
@@ -121,6 +190,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
     final notes = widget.info.changelog.trim();
 
     return AlertDialog(
+      scrollable: true,
       icon: Container(
         width: 64,
         height: 64,
@@ -157,6 +227,13 @@ class _UpdateDialogState extends State<UpdateDialog> {
               ),
             ],
             const SizedBox(height: 14),
+            if (_status.label.isNotEmpty) ...[
+              Text(_status.label, style: const TextStyle(height: 1.45)),
+              const SizedBox(height: 10),
+              if (_status.isActive)
+                LinearProgressIndicator(value: _status.progress),
+              const SizedBox(height: 10),
+            ],
             Text(
               _downloadStarted
                   ? 'Your download is managed by Android and can continue in the background. '
@@ -186,7 +263,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
       actions: [
         TextButton(
           onPressed: _opening ? null : _later,
-          child: const Text('Later'),
+          child: Text(_downloadStarted ? 'Close' : 'Later'),
         ),
         FilledButton.icon(
           onPressed: _opening ? null : _openOfficialUpdate,
@@ -198,7 +275,9 @@ class _UpdateDialogState extends State<UpdateDialog> {
               : const Icon(Icons.download_rounded),
           label: Text(_opening
               ? 'Opening…'
-              : _downloadStarted ? 'View download' : 'Download update'),
+              : _status.canRetry
+                  ? 'Retry download'
+                  : _downloadStarted ? 'View download' : 'Download update'),
         ),
       ],
     );
