@@ -1,0 +1,76 @@
+name: Actions Storage Cleanup
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/actions-storage-cleanup.yml'
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: actions-storage-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Clean old Actions history, artifacts and caches
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Clean GitHub Actions storage and old run history
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const currentRunId = Number(context.runId);
+            const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+            async function remove(path, params, label) {
+              try {
+                await github.request(`DELETE ${path}`, params);
+                return true;
+              } catch (error) {
+                if (error.status === 404) return false;
+                core.warning(`${label}: ${error.status || ''} ${error.message}`);
+                if (error.status === 403 || error.status === 429) {
+                  await sleep(3000);
+                  try {
+                    await github.request(`DELETE ${path}`, params);
+                    return true;
+                  } catch (retryError) {
+                    core.warning(`Retry failed for ${label}: ${retryError.status || ''} ${retryError.message}`);
+                  }
+                }
+                return false;
+              }
+            }
+            const artifacts = await github.paginate('GET /repos/{owner}/{repo}/actions/artifacts', { owner, repo, per_page: 100 });
+            let artifactsDeleted = 0;
+            for (const artifact of artifacts) {
+              if (await remove('DELETE /repos/{owner}/{repo}/actions/artifacts/{artifact_id}', { owner, repo, artifact_id: artifact.id }, `artifact ${artifact.id}`)) artifactsDeleted++;
+              await sleep(75);
+            }
+            const caches = await github.paginate('GET /repos/{owner}/{repo}/actions/caches', { owner, repo, per_page: 100 });
+            let cachesDeleted = 0;
+            for (const cache of caches) {
+              if (await remove('DELETE /repos/{owner}/{repo}/actions/caches/{cache_id}', { owner, repo, cache_id: cache.id }, `cache ${cache.id}`)) cachesDeleted++;
+              await sleep(75);
+            }
+            const runs = await github.paginate('GET /repos/{owner}/{repo}/actions/runs', { owner, repo, per_page: 100 });
+            const keep = new Set([currentRunId]);
+            const successCount = new Map();
+            for (const run of runs) {
+              if (run.status !== 'completed' || run.conclusion !== 'success') continue;
+              const key = String(run.workflow_id);
+              const count = successCount.get(key) || 0;
+              if (count < 3) { keep.add(run.id); successCount.set(key, count + 1); }
+            }
+            const deletable = runs.filter(run => run.status === 'completed' && !keep.has(run.id));
+            let runsDeleted = 0;
+            for (const run of deletable) {
+              if (await remove('DELETE /repos/{owner}/{repo}/actions/runs/{run_id}', { owner, repo, run_id: run.id }, `run ${run.id}`)) runsDeleted++;
+              await sleep(100);
+            }
+            core.notice(`Cleanup complete: ${artifactsDeleted} artifacts, ${cachesDeleted} caches, ${runsDeleted} workflow runs deleted. Kept current run and up to three newest successful runs per workflow.`);
