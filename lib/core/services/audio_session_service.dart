@@ -21,6 +21,8 @@ class AudioSessionService {
   bool _initialized = false;
   bool _pauseDuringCalls = true;
   bool _resumeAfterInterruption = false;
+  Player? _playerPausedForInterruption;
+  Player? _duckedPlayer;
   double? _volumeBeforeDuck;
 
   Future<void> init({required bool pauseDuringCalls}) async {
@@ -68,13 +70,17 @@ class AudioSessionService {
     await _interruptionSub?.cancel();
     _interruptionSub = null;
     _resumeAfterInterruption = false;
+    _playerPausedForInterruption = null;
 
     final previous = _volumeBeforeDuck;
+    final duckedPlayer = _duckedPlayer;
     _volumeBeforeDuck = null;
-    final player = PlaybackCoordinator.instance.activePlayer;
-    if (previous != null && player != null) {
+    _duckedPlayer = null;
+    if (previous != null &&
+        duckedPlayer != null &&
+        identical(PlaybackCoordinator.instance.activePlayer, duckedPlayer)) {
       try {
-        await player.setVolume(previous);
+        await duckedPlayer.setVolume(previous);
       } catch (error) {
         debugPrint('[AudioSession] volume restore failed: $error');
       }
@@ -115,7 +121,12 @@ class AudioSessionService {
     if (event.begin) {
       switch (event.type) {
         case AudioInterruptionType.duck:
-          _volumeBeforeDuck ??= player.state.volume;
+          // Remember both the volume and the exact player. A different media
+          // owner may become active before Android ends the interruption.
+          if (_duckedPlayer == null) {
+            _duckedPlayer = player;
+            _volumeBeforeDuck = player.state.volume;
+          }
           unawaited(
             player.setVolume(
               (player.state.volume * .35).clamp(0.0, 100.0),
@@ -124,10 +135,13 @@ class AudioSessionService {
           break;
         case AudioInterruptionType.pause:
           _resumeAfterInterruption = player.state.playing;
+          _playerPausedForInterruption =
+              _resumeAfterInterruption ? player : null;
           if (_resumeAfterInterruption) unawaited(player.pause());
           break;
         case AudioInterruptionType.unknown:
           _resumeAfterInterruption = false;
+          _playerPausedForInterruption = null;
           if (player.state.playing) unawaited(player.pause());
           break;
       }
@@ -137,17 +151,27 @@ class AudioSessionService {
     switch (event.type) {
       case AudioInterruptionType.duck:
         final previous = _volumeBeforeDuck;
+        final duckedPlayer = _duckedPlayer;
         _volumeBeforeDuck = null;
-        if (previous != null) unawaited(player.setVolume(previous));
+        _duckedPlayer = null;
+        if (previous != null &&
+            duckedPlayer != null &&
+            identical(PlaybackCoordinator.instance.activePlayer, duckedPlayer)) {
+          unawaited(duckedPlayer.setVolume(previous));
+        }
         break;
       case AudioInterruptionType.pause:
-        if (_resumeAfterInterruption) {
-          _resumeAfterInterruption = false;
-          unawaited(_resumeAfterFocusInterruption(player));
+        final shouldResume = _resumeAfterInterruption;
+        final interruptedPlayer = _playerPausedForInterruption;
+        _resumeAfterInterruption = false;
+        _playerPausedForInterruption = null;
+        if (shouldResume && interruptedPlayer != null) {
+          unawaited(_resumeAfterFocusInterruption(interruptedPlayer));
         }
         break;
       case AudioInterruptionType.unknown:
         _resumeAfterInterruption = false;
+        _playerPausedForInterruption = null;
         break;
     }
   }
@@ -176,6 +200,7 @@ class AudioSessionService {
     final player = PlaybackCoordinator.instance.activePlayer;
     if (player == null || !player.state.playing) return;
     _resumeAfterInterruption = false;
+    _playerPausedForInterruption = null;
     await player.pause();
     debugPrint('[AudioSession] paused after audio output became noisy.');
   }
@@ -185,6 +210,9 @@ class AudioSessionService {
     await _noisySub?.cancel();
     _interruptionSub = null;
     _noisySub = null;
+    _playerPausedForInterruption = null;
+    _duckedPlayer = null;
+    _volumeBeforeDuck = null;
     _session = null;
     _initialized = false;
   }
