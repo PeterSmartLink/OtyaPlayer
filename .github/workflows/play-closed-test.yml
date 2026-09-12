@@ -5,7 +5,7 @@ on:
 
 concurrency:
   group: play-closed-test-aab
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -190,7 +190,7 @@ jobs:
         with:
           name: Otya-Play-closed-test
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3
           path: |
             build/play-closed-test/Otya-Play-closed-test.aab
             build/play-closed-test/Otya-Play-closed-test-signing.txt
