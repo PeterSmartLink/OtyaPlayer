@@ -151,16 +151,25 @@ class SettingsDetailScreen extends ConsumerWidget {
               title: 'Notifications',
               subtitle: 'Completed tasks, security notices and Otya updates',
               onTap: () async {
-                HapticFeedback.selectionClick();
                 final granted = await NotificationService.instance.requestPermission();
                 if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
+                final messenger = ScaffoldMessenger.of(context);
+                messenger.hideCurrentSnackBar();
+                messenger.showSnackBar(
                   SnackBar(
                     content: Text(
                       granted
                           ? 'Notifications are enabled.'
-                          : 'Notification permission was not granted.',
+                          : 'Notifications are off. Enable them in Android settings to receive Otya updates and security notices.',
                     ),
+                    action: granted
+                        ? null
+                        : SnackBarAction(
+                            label: 'Open settings',
+                            onPressed: () {
+                              openAppSettings();
+                            },
+                          ),
                   ),
                 );
               },
