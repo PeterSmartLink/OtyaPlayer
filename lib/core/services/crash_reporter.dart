@@ -137,6 +137,23 @@ class CrashReporter {
       ),
       '<redacted-email>',
     );
+    // Local media paths frequently contain a person's folder names, filenames,
+    // WhatsApp exports, camera labels, or other private device information.
+    // Remove the rest of that line rather than trying to preserve a basename.
+    sanitized = sanitized.replaceAll(
+      RegExp(
+        r'(?:file://)?/(?:storage/emulated/\d+|sdcard)/[^\r\n]*',
+        caseSensitive: false,
+      ),
+      '<redacted-device-path>',
+    );
+    sanitized = sanitized.replaceAll(
+      RegExp(
+        r'(?:file://)?/(?:data/user/\d+|data/data)/com\.otyaplayer\.app/[^\r\n]*',
+        caseSensitive: false,
+      ),
+      '<redacted-app-path>',
+    );
     sanitized = sanitized.replaceAllMapped(
       RegExp(
         r'''(["']?(?:access_token|refresh_token|id_token|password|api_key)["']?\s*[:=]\s*)["']?[^\s,"'}&]+''',
