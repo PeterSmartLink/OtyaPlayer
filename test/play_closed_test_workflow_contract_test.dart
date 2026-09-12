@@ -37,6 +37,6 @@ void main() {
   test('Play closed-test artifact is retained only as an Actions build artifact', () {
     expect(workflow, contains('actions/upload-artifact@v4'));
     expect(workflow, contains('Otya-Play-closed-test.aab'));
-    expect(workflow, contains('retention-days: 14'));
+    expect(workflow, contains('retention-days: 3'));
   });
 }
