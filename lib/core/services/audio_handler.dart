@@ -14,6 +14,7 @@ class OtyaAudioHandler extends BaseAudioHandler with SeekHandler {
   StreamSubscription? _bufferingSub;
   StreamSubscription? _positionSub;
   StreamSubscription? _durationSub;
+  StreamSubscription? _completedSub;
 
   void attachPlayer(Player player) {
     debugPrint('[OtyaAudioHandler] Attaching player');
@@ -67,6 +68,24 @@ class OtyaAudioHandler extends BaseAudioHandler with SeekHandler {
         mediaItem.add(current.copyWith(duration: duration));
       }
     });
+    _completedSub = player.stream.completed.listen((completed) {
+      if (!_isCurrentPlayer(player) || !completed) return;
+      // Android/Auto/Bluetooth clients need a terminal MediaSession state at
+      // the real end of media. Without this, the lock-screen session can stay
+      // "ready" even though playback has ended. If Otya auto-advances, the
+      // next playing/buffering/position event transitions the session back to
+      // ready/loading naturally.
+      final duration = player.state.duration;
+      playbackState.add(playbackState.value.copyWith(
+        processingState: AudioProcessingState.completed,
+        playing: false,
+        updatePosition: duration > Duration.zero
+            ? duration
+            : player.state.position,
+        bufferedPosition: player.state.buffer,
+        speed: player.state.rate,
+      ));
+    });
   }
 
   void _cancelSubscriptions() {
@@ -74,7 +93,8 @@ class OtyaAudioHandler extends BaseAudioHandler with SeekHandler {
     _bufferingSub?.cancel();
     _positionSub?.cancel();
     _durationSub?.cancel();
-    _playingSub = _bufferingSub = _positionSub = _durationSub = null;
+    _completedSub?.cancel();
+    _playingSub = _bufferingSub = _positionSub = _durationSub = _completedSub = null;
   }
 
   List<MediaControl> _controls(bool isPlaying) => [
