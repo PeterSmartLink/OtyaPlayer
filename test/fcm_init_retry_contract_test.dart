@@ -37,4 +37,11 @@ void main() {
     expect(source, contains('initial message lookup failed (non-fatal)'));
     expect(source, contains('initial token sync failed (non-fatal)'));
   });
+
+  test('FCM keeps every Android install on the bounded public broadcast topic', () {
+    expect(source, contains("static const _publicTopic = 'otya_public';"));
+    expect(source, contains('await messaging.subscribeToTopic(_publicTopic);'));
+    expect(source, contains('_syncPublicTopic(messaging).ignore();'));
+    expect(source, contains('public topic sync failed (non-fatal)'));
+  });
 }
