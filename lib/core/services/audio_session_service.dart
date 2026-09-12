@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import 'playback_coordinator.dart';
 
-/// Owns OTYA's app-wide audio focus and interruption policy.
+/// Owns Otya's app-wide audio focus and interruption policy.
 ///
 /// Android exposes one shared audio-focus contract for the app. Keeping the
 /// policy here prevents the MediaKit player, background audio service and
@@ -142,12 +142,32 @@ class AudioSessionService {
       case AudioInterruptionType.pause:
         if (_resumeAfterInterruption) {
           _resumeAfterInterruption = false;
-          unawaited(player.play());
+          unawaited(_resumeAfterFocusInterruption(player));
         }
         break;
       case AudioInterruptionType.unknown:
         _resumeAfterInterruption = false;
         break;
+    }
+  }
+
+  Future<void> _resumeAfterFocusInterruption(dynamic player) async {
+    // Android may have fully revoked audio focus during a call or competing
+    // media session. Reclaim it before asking MediaKit to resume; otherwise
+    // some devices report playing while audio remains silent or immediately
+    // pause the session again.
+    final focusGranted = await activate();
+    if (!focusGranted) {
+      debugPrint('[AudioSession] resume skipped because audio focus was not restored.');
+      return;
+    }
+    // The active playback owner may have changed while the interruption was
+    // ending. Never resume an old player behind the current screen/session.
+    if (!identical(PlaybackCoordinator.instance.activePlayer, player)) return;
+    try {
+      await player.play();
+    } catch (error) {
+      debugPrint('[AudioSession] resume after interruption failed: $error');
     }
   }
 
