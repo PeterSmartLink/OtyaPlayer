@@ -21,56 +21,80 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Clean GitHub Actions storage and old run history
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            const currentRunId = Number(context.runId);
-            const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-            async function remove(path, params, label) {
-              try {
-                await github.request(`DELETE ${path}`, params);
-                return true;
-              } catch (error) {
-                if (error.status === 404) return false;
-                core.warning(`${label}: ${error.status || ''} ${error.message}`);
-                if (error.status === 403 || error.status === 429) {
-                  await sleep(3000);
-                  try {
-                    await github.request(`DELETE ${path}`, params);
-                    return true;
-                  } catch (retryError) {
-                    core.warning(`Retry failed for ${label}: ${retryError.status || ''} ${retryError.message}`);
-                  }
-                }
-                return false;
-              }
-            }
-            const artifacts = await github.paginate('GET /repos/{owner}/{repo}/actions/artifacts', { owner, repo, per_page: 100 });
-            let artifactsDeleted = 0;
-            for (const artifact of artifacts) {
-              if (await remove('DELETE /repos/{owner}/{repo}/actions/artifacts/{artifact_id}', { owner, repo, artifact_id: artifact.id }, `artifact ${artifact.id}`)) artifactsDeleted++;
-              await sleep(75);
-            }
-            const caches = await github.paginate('GET /repos/{owner}/{repo}/actions/caches', { owner, repo, per_page: 100 });
-            let cachesDeleted = 0;
-            for (const cache of caches) {
-              if (await remove('DELETE /repos/{owner}/{repo}/actions/caches/{cache_id}', { owner, repo, cache_id: cache.id }, `cache ${cache.id}`)) cachesDeleted++;
-              await sleep(75);
-            }
-            const runs = await github.paginate('GET /repos/{owner}/{repo}/actions/runs', { owner, repo, per_page: 100 });
-            const keep = new Set([currentRunId]);
-            const successCount = new Map();
-            for (const run of runs) {
-              if (run.status !== 'completed' || run.conclusion !== 'success') continue;
-              const key = String(run.workflow_id);
-              const count = successCount.get(key) || 0;
-              if (count < 3) { keep.add(run.id); successCount.set(key, count + 1); }
-            }
-            const deletable = runs.filter(run => run.status === 'completed' && !keep.has(run.id));
-            let runsDeleted = 0;
-            for (const run of deletable) {
-              if (await remove('DELETE /repos/{owner}/{repo}/actions/runs/{run_id}', { owner, repo, run_id: run.id }, `run ${run.id}`)) runsDeleted++;
-              await sleep(100);
-            }
-            core.notice(`Cleanup complete: ${artifactsDeleted} artifacts, ${cachesDeleted} caches, ${runsDeleted} workflow runs deleted. Kept current run and up to three newest successful runs per workflow.`);
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          repo="$GITHUB_REPOSITORY"
+          current="$GITHUB_RUN_ID"
+          artifacts_deleted=0
+          caches_deleted=0
+          runs_deleted=0
+          failures=0
+
+          delete_api() {
+            local endpoint="$1" label="$2"
+            if gh api --method DELETE "$endpoint" >/dev/null 2>&1; then
+              return 0
+            fi
+            sleep 1
+            if gh api --method DELETE "$endpoint" >/dev/null 2>&1; then
+              return 0
+            fi
+            echo "::warning::$label could not be deleted"
+            failures=$((failures + 1))
+            return 1
+          }
+
+          mapfile -t artifact_ids < <(gh api --paginate "/repos/$repo/actions/artifacts?per_page=100" --jq '.artifacts[].id' 2>/dev/null || true)
+          for id in "${artifact_ids[@]}"; do
+            if delete_api "/repos/$repo/actions/artifacts/$id" "artifact $id"; then
+              artifacts_deleted=$((artifacts_deleted + 1))
+            fi
+          done
+
+          mapfile -t cache_ids < <(gh api --paginate "/repos/$repo/actions/caches?per_page=100" --jq '.actions_caches[].id' 2>/dev/null || true)
+          for id in "${cache_ids[@]}"; do
+            if delete_api "/repos/$repo/actions/caches/$id" "cache $id"; then
+              caches_deleted=$((caches_deleted + 1))
+            fi
+          done
+
+          gh api --paginate "/repos/$repo/actions/runs?per_page=100" \
+            --jq '.workflow_runs[] | [.id,.workflow_id,.status,(.conclusion // "")] | @tsv' \
+            > /tmp/runs.tsv
+
+          remaining=$(gh api rate_limit --jq '.resources.core.remaining' 2>/dev/null || echo 900)
+          if (( remaining > 75 )); then
+            run_budget=$((remaining - 75))
+          else
+            run_budget=0
+          fi
+          echo "Core API requests remaining before run deletion: $remaining; run deletion budget: $run_budget"
+
+          declare -A kept_success
+          while IFS=$'\t' read -r id workflow status conclusion; do
+            [[ -z "$id" ]] && continue
+            [[ "$id" == "$current" ]] && continue
+            [[ "$status" != "completed" ]] && continue
+
+            if [[ "$conclusion" == "success" ]]; then
+              count="${kept_success[$workflow]:-0}"
+              if (( count < 3 )); then
+                kept_success[$workflow]=$((count + 1))
+                continue
+              fi
+            fi
+
+            if (( runs_deleted >= run_budget )); then
+              echo "::notice::Stopped old-run deletion before GitHub API rate exhaustion; storage artifacts/caches were handled first."
+              break
+            fi
+
+            if delete_api "/repos/$repo/actions/runs/$id" "workflow run $id"; then
+              runs_deleted=$((runs_deleted + 1))
+            fi
+          done < /tmp/runs.tsv
+
+          echo "::notice::Cleanup complete: $artifacts_deleted artifacts, $caches_deleted caches, $runs_deleted workflow runs deleted; $failures deletion failures. Kept the current run and up to three newest successful runs per workflow."
