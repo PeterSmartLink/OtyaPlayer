@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auth_service.dart';
+import 'fcm_service.dart';
 
 class AuthState {
   final String? userId;
@@ -65,6 +66,7 @@ class AuthNotifier extends Notifier<AuthState> {
       email: prefs.getString('otya_user_email') ?? AuthService.instance.userEmail,
       photoUrl: prefs.getString('otya_user_avatar'),
     );
+    FcmService.instance.syncRegistration().ignore();
   }
 
   Future<void> signIn({
@@ -110,6 +112,10 @@ class AuthNotifier extends Notifier<AuthState> {
       email: resolvedEmail?.trim().isNotEmpty == true ? resolvedEmail!.trim() : null,
       photoUrl: resolvedPhotoUrl?.isNotEmpty == true ? resolvedPhotoUrl : null,
     );
+
+    // Rebind this installation to the newly authenticated account. This is
+    // recoverable background work; sign-in UI must not wait on FCM/network.
+    FcmService.instance.syncRegistration().ignore();
   }
 
   Future<void> signOut() async {
@@ -117,6 +123,11 @@ class AuthNotifier extends Notifier<AuthState> {
     final prefs = await SharedPreferences.getInstance();
     await _clearLocalState(prefs);
     state = const AuthState();
+
+    // AuthService has already cleared the local bearer session. Re-registering
+    // the same installation anonymously now detaches its previous user_id on
+    // the server, without delaying the local-first sign-out boundary.
+    FcmService.instance.syncRegistration().ignore();
   }
 
   Future<void> _clearLocalState(SharedPreferences prefs) async {
