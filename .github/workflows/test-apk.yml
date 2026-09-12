@@ -3,8 +3,16 @@ name: Test Otya
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.github/**'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.github/**'
   workflow_dispatch:
 
 concurrency:
@@ -150,11 +158,12 @@ jobs:
           "$APKKIT" manifest version-code "$APK" | tee build/Otya-test-version-code.txt
 
       - name: Save Otya test APK
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: Otya-test
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 3
           path: |
             build/Otya-test.apk
             build/Otya-test-checksum.txt
