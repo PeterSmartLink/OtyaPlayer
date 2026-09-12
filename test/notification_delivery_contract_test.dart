@@ -55,6 +55,15 @@ void main() {
       settings,
       contains('NotificationService.instance.requestPermission()'),
     );
+
+    final notificationStart = settings.indexOf("title: 'Notifications'");
+    final notificationEnd = settings.indexOf("title: 'Android app permissions'");
+    expect(notificationStart, greaterThanOrEqualTo(0));
+    expect(notificationEnd, greaterThan(notificationStart));
+    final notificationTile = settings.substring(notificationStart, notificationEnd);
+    expect(notificationTile, contains("label: 'Open settings'"));
+    expect(notificationTile, contains('openAppSettings()'));
+    expect(notificationTile, contains('action: granted'));
   });
 
   test('existing installs receive one non-repeating notification prompt', () {
