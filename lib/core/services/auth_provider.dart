@@ -57,6 +57,9 @@ class AuthNotifier extends Notifier<AuthState> {
         storedUserId != authenticatedUserId) {
       await _clearLocalState(prefs);
       state = const AuthState();
+      // A revoked/expired/replaced session must not leave this installation
+      // linked to the previous account for private notification delivery.
+      FcmService.instance.syncRegistration().ignore();
       return;
     }
 
