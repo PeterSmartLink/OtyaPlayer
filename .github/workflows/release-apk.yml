@@ -184,7 +184,7 @@ jobs:
         with:
           name: otya-arm64-release-apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3
           path: |
             build/Otya-arm64-release.apk
             build/release-apk-sha256.txt
