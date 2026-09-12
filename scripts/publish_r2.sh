@@ -79,18 +79,46 @@ TARGET_SDK=$(grep 'targetSdk' android/app/build.gradle | grep -v '//' | head -1 
 
 upload_and_verify() {
   local SRC="$1" DEST_KEY="$2" CACHE_CONTROL="$3"
-  local LOCAL_SIZE REMOTE_SIZE
+  local LOCAL_SIZE REMOTE_SIZE REMOTE_TYPE REMOTE_CACHE
   LOCAL_SIZE=$(stat -c%s "$SRC" 2>/dev/null || stat -f%z "$SRC")
   echo "Uploading $DEST_KEY ($LOCAL_SIZE bytes)..."
   aws s3 cp "$SRC" "s3://${R2_BUCKET}/${DEST_KEY}" \
     --endpoint-url "$R2_ENDPOINT" \
     --content-type application/vnd.android.package-archive \
     --cache-control "$CACHE_CONTROL"
-  REMOTE_SIZE=$(aws s3 ls "s3://${R2_BUCKET}/${DEST_KEY}" --endpoint-url "$R2_ENDPOINT" | awk '{print $3}')
+
+  REMOTE_SIZE=$(aws s3api head-object \
+    --bucket "$R2_BUCKET" \
+    --key "$DEST_KEY" \
+    --endpoint-url "$R2_ENDPOINT" \
+    --query ContentLength \
+    --output text)
+  REMOTE_TYPE=$(aws s3api head-object \
+    --bucket "$R2_BUCKET" \
+    --key "$DEST_KEY" \
+    --endpoint-url "$R2_ENDPOINT" \
+    --query ContentType \
+    --output text)
+  REMOTE_CACHE=$(aws s3api head-object \
+    --bucket "$R2_BUCKET" \
+    --key "$DEST_KEY" \
+    --endpoint-url "$R2_ENDPOINT" \
+    --query CacheControl \
+    --output text)
+
   [ "$REMOTE_SIZE" = "$LOCAL_SIZE" ] || {
-    echo "ERROR: Upload size mismatch for $DEST_KEY"
+    echo "ERROR: Upload size mismatch for $DEST_KEY (local=$LOCAL_SIZE remote=$REMOTE_SIZE)"
     return 1
   }
+  [ "$REMOTE_TYPE" = "application/vnd.android.package-archive" ] || {
+    echo "ERROR: Upload content type mismatch for $DEST_KEY ($REMOTE_TYPE)"
+    return 1
+  }
+  [ "$REMOTE_CACHE" = "$CACHE_CONTROL" ] || {
+    echo "ERROR: Upload cache-control mismatch for $DEST_KEY ($REMOTE_CACHE)"
+    return 1
+  }
+  echo "Verified $DEST_KEY: size, APK MIME and cache policy are correct"
 }
 
 ARM64_VERSIONED="releases/${RAW_TAG}/Otya-arm64.apk"
