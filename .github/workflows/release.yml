@@ -289,7 +289,7 @@ jobs:
         with:
           name: Otya-${{ steps.release.outputs.tag }}
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 3
           path: |
             build/release/**
             build/flutter-analyze-release.log
