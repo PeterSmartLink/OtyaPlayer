@@ -26,6 +26,16 @@ void main() {
     expect(source, contains('await stop();'));
   });
 
+  test('system media session publishes a terminal state when media ends', () {
+    final source =
+        File('lib/core/services/audio_handler.dart').readAsStringSync();
+
+    expect(source, contains('player.stream.completed.listen((completed)'));
+    expect(source, contains('AudioProcessingState.completed'));
+    expect(source, contains('_completedSub?.cancel();'));
+    expect(source, contains('playing: false'));
+  });
+
   test('Android exposes a media playback foreground service', () {
     final manifest = File(
       'android/app/src/main/AndroidManifest.xml',
