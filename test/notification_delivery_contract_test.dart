@@ -3,6 +3,17 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('background update taps use the foreground in-app update handler', () {
+    final source = File('lib/core/services/fcm_service.dart').readAsStringSync();
+    final opened = source.substring(source.indexOf('Future<void> _handleOpenedMessage'));
+    final update = opened.substring(0, opened.indexOf('final route ='));
+    expect(update, contains("message.data['type']?.toString() == 'update'"));
+    expect(update, contains('PushNotificationService.instance.handleTap'));
+    expect(update, contains('id: PushNotificationService.idUpdate'));
+    expect(update, contains('return;'));
+    expect(update, isNot(contains('launchUrl')));
+  });
+
   test('notification startup coalesces concurrent callers', () {
     final source = File('lib/core/services/shared_notification_plugin.dart')
         .readAsStringSync();

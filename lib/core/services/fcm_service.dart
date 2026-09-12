@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -240,6 +241,19 @@ class FcmService {
   }
 
   Future<void> _handleOpenedMessage(RemoteMessage message) async {
+    // Background and terminated-app update taps use the same trusted updater
+    // as foreground notifications; release metadata remains authoritative.
+    if (message.data['type']?.toString() == 'update') {
+      final target = message.data['download_url']?.toString() ??
+          message.data['url']?.toString() ?? '';
+      PushNotificationService.instance.handleTap(NotificationResponse(
+        notificationResponseType: NotificationResponseType.selectedNotification,
+        id: PushNotificationService.idUpdate,
+        payload: 'update:$target',
+      ));
+      return;
+    }
+
     final route = _canonicalRoute(message.data['route']?.toString());
     if (route != null) {
       try {
