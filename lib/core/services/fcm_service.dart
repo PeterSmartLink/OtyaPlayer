@@ -33,6 +33,7 @@ class FcmService {
   static final FcmService instance = FcmService._();
 
   static const _keyFcmToken = 'fcm_token';
+  static const _publicTopic = 'otya_public';
   bool _initialized = false;
   bool _listenersAttached = false;
   Future<void>? _initInFlight;
@@ -95,15 +96,19 @@ class FcmService {
         FirebaseMessaging.onMessageOpenedApp.listen(_handleOpenedMessage);
         messaging.onTokenRefresh.listen((token) {
           _storeAndRegister(token).ignore();
+          _syncPublicTopic(messaging).ignore();
         });
         _listenersAttached = true;
       }
 
-      // The transport is ready now. Initial-message lookup and token sync are
-      // recoverable follow-up work and must not attach duplicate listeners on a
-      // later init attempt. Ordinary notification consent remains user-driven
-      // from Settings; media-session playback does not need POST_NOTIFICATIONS.
+      // The transport is ready now. Initial-message lookup, public-topic
+      // subscription and token sync are recoverable follow-up work and must not
+      // attach duplicate listeners on a later init attempt. Ordinary notification
+      // consent remains user-driven from Settings; media-session playback does
+      // not need POST_NOTIFICATIONS.
       _initialized = true;
+
+      await _syncPublicTopic(messaging);
 
       try {
         final initialMessage = await messaging.getInitialMessage();
@@ -135,13 +140,26 @@ class FcmService {
     }
   }
 
+  Future<void> _syncPublicTopic(FirebaseMessaging messaging) async {
+    try {
+      // Firebase topic subscriptions are idempotent. Keeping this on every
+      // recoverable sync makes app reinstalls/token rotation converge without
+      // requiring a server-side per-device fanout for public announcements.
+      await messaging.subscribeToTopic(_publicTopic);
+    } catch (e) {
+      debugPrint('[FCM] public topic sync failed (non-fatal): $e');
+    }
+  }
+
   Future<void> syncRegistration() async {
     if (!OtyaFirebaseConfig.configured || !Platform.isAndroid) return;
     try {
       if (!await FirebasePlatformService.instance.ensureInitialized()) return;
+      final messaging = FirebaseMessaging.instance;
+      await _syncPublicTopic(messaging);
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString(_keyFcmToken) ??
-          await FirebaseMessaging.instance.getToken();
+          await messaging.getToken();
       if (token != null && token.isNotEmpty) {
         await _storeAndRegister(token);
       }
