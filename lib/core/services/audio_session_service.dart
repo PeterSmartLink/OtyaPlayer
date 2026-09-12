@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
+import 'package:media_kit/media_kit.dart';
 
 import 'playback_coordinator.dart';
 
@@ -151,7 +152,7 @@ class AudioSessionService {
     }
   }
 
-  Future<void> _resumeAfterFocusInterruption(dynamic player) async {
+  Future<void> _resumeAfterFocusInterruption(Player player) async {
     // Android may have fully revoked audio focus during a call or competing
     // media session. Reclaim it before asking MediaKit to resume; otherwise
     // some devices report playing while audio remains silent or immediately
