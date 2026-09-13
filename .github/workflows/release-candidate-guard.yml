@@ -1,0 +1,42 @@
+name: Guard Otya release candidate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate-guard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  candidate_identity:
+    name: Verify next public build identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout with release tags
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Require a new immutable build number
+        shell: bash
+        run: bash scripts/verify-release-candidate-version.sh
+
+      - name: Check publication contract files exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s docs/PRIVACY_POLICY.md
+          test -s docs/OTYA_V1_FEATURE_PARITY.md
+          test -s docs/SYSTEM_TRUTH_AUDIT.md
+          test -s scripts/verify-android-release-apk.sh
+          test -s .github/workflows/release-mode-validation.yml
+          test -s .github/workflows/play-closed-test.yml
+          test -s .github/workflows/release.yml
