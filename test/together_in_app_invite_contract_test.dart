@@ -21,10 +21,8 @@ void main() {
   });
 
   test('pending invitation joins without copying the secret link', () {
-    expect(
-      client,
-      contains('inviteToken.trim().isEmpty ? <String, Object?>{}'),
-    );
+    expect(client, contains("normalizedInviteToken.isEmpty"));
+    expect(client, contains("<String, Object?>{}"));
     expect(runtime, contains('String inviteToken = \'\''));
     expect(sheet, contains('_joinPending(TogetherRemoteRoom room)'));
     expect(sheet, contains('child: const Text(\'Join\')'));
@@ -34,6 +32,20 @@ void main() {
     expect(sheet, contains('\'Older invite link\''));
     expect(sheet, contains('labelText: \'Fallback private invite\''));
     expect(sheet, contains('\'Join from link\''));
+  });
+
+  test('Together rejects malformed control identifiers before network work', () {
+    expect(client, contains("RegExp(r'^[A-Za-z0-9_-]{20,32}\\$')"));
+    expect(client, contains('identity.isValidUsername(username)'));
+    expect(client, contains('normalizedInviteToken.length > 256'));
+    expect(client, contains('normalizedAfter.length > 64'));
+    expect(client, contains("code: 'INVALID_ROOM_ID'"));
+    expect(client, contains("code: 'INVALID_INVITE'"));
+    expect(client, contains("code: 'INVALID_SIGNAL_CURSOR'"));
+  });
+
+  test('Together drops control-plane signals from another room', () {
+    expect(client, contains('signal.roomId == normalizedRoomId'));
   });
 
   test('join surface explains local-copy data saving', () {
