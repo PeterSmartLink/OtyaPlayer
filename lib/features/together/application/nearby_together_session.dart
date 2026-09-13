@@ -116,6 +116,7 @@ class NearbyTogetherHostSession {
       _mediaUrl = url;
       return invite;
     } catch (_) {
+      await channel.stop();
       await _mediaSender.stop();
       rethrow;
     }
@@ -186,40 +187,41 @@ class NearbyTogetherGuestSession {
         .firstWhere((message) => message.type == 'hello')
         .timeout(const Duration(seconds: 10));
 
-    await channel.connect(inviteUri);
-
-    NearbyTogetherMessage hello;
     try {
-      hello = await helloFuture;
+      await channel.connect(inviteUri);
+      final hello = await helloFuture;
+      final plan = await _planFromHello(
+        hello,
+        expectedHost: inviteUri.host,
+        candidateLocalFilePath: candidateLocalFilePath,
+        candidateDuration: candidateDuration,
+        candidateMimeType: candidateMimeType,
+      );
+      _expectedHost = inviteUri.host;
+      _hostDisplayName = plan.hostDisplayName;
+      _hostUsername = plan.hostUsername;
+
+      final cleanName =
+          displayName.trim().isEmpty ? 'OTYA user' : displayName.trim();
+      final cleanUsername = username
+          ?.trim()
+          .replaceFirst(RegExp(r'^@+'), '')
+          .toLowerCase();
+      await channel.send('ready', {
+        'source': plan.kind.name,
+        'has_complete_media': plan.kind == NearbyPlaybackSourceKind.localCopy,
+        'display_name': cleanName,
+        if (cleanUsername != null && cleanUsername.isNotEmpty)
+          'username': cleanUsername,
+      });
+      return plan;
     } catch (_) {
+      _expectedHost = null;
+      _hostDisplayName = 'OTYA user';
+      _hostUsername = null;
       await channel.disconnect();
       rethrow;
     }
-
-    final plan = await _planFromHello(
-      hello,
-      expectedHost: inviteUri.host,
-      candidateLocalFilePath: candidateLocalFilePath,
-      candidateDuration: candidateDuration,
-      candidateMimeType: candidateMimeType,
-    );
-    _expectedHost = inviteUri.host;
-    _hostDisplayName = plan.hostDisplayName;
-    _hostUsername = plan.hostUsername;
-
-    final cleanName = displayName.trim().isEmpty ? 'OTYA user' : displayName.trim();
-    final cleanUsername = username
-        ?.trim()
-        .replaceFirst(RegExp(r'^@+'), '')
-        .toLowerCase();
-    await channel.send('ready', {
-      'source': plan.kind.name,
-      'has_complete_media': plan.kind == NearbyPlaybackSourceKind.localCopy,
-      'display_name': cleanName,
-      if (cleanUsername != null && cleanUsername.isNotEmpty)
-        'username': cleanUsername,
-    });
-    return plan;
   }
 
   /// Builds the next playback plan from a host media-handoff message. V1 uses
@@ -269,7 +271,8 @@ class NearbyTogetherGuestSession {
             .toLowerCase()
         : null;
 
-    if (candidateLocalFilePath != null && candidateLocalFilePath.trim().isNotEmpty) {
+    if (candidateLocalFilePath != null &&
+        candidateLocalFilePath.trim().isNotEmpty) {
       try {
         final local = await MediaFingerprintService.instance.identify(
           filePath: candidateLocalFilePath,
@@ -301,7 +304,9 @@ class NearbyTogetherGuestSession {
   static OtyaMediaIdentity _remoteIdentity(Map<String, dynamic> payload) {
     final mediaJson = payload['media'];
     if (mediaJson is! Map) {
-      throw const FormatException('Nearby Together host did not provide media identity.');
+      throw const FormatException(
+        'Nearby Together host did not provide media identity.',
+      );
     }
 
     final media = Map<String, dynamic>.from(mediaJson);
@@ -320,7 +325,8 @@ class NearbyTogetherGuestSession {
       duration: media['duration_ms'] is int
           ? Duration(milliseconds: media['duration_ms'] as int)
           : null,
-      mimeType: media['mime_type'] is String ? media['mime_type'] as String : null,
+      mimeType:
+          media['mime_type'] is String ? media['mime_type'] as String : null,
     );
   }
 
@@ -333,7 +339,9 @@ class NearbyTogetherGuestSession {
     if (hostUrl == null ||
         !isAllowedTransferUri(hostUrl) ||
         hostUrl.host != expectedHost) {
-      throw const FormatException('Nearby Together host media source is invalid.');
+      throw const FormatException(
+        'Nearby Together host media source is invalid.',
+      );
     }
     return hostUrl;
   }
