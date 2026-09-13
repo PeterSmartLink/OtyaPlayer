@@ -17,12 +17,25 @@ are preserved in Git history and are not public Otya releases.
 - Kept the reviewed immutable MediaKit Android disposal-order fix pinned across
   the direct and overridden dependency graph.
 
+### Together
+
+- Enabled Watch Together in the public Otya candidate instead of hiding it behind
+  an internal validation flag.
+- Public Android builds now explicitly compile Together on for Nearby and
+  Anywhere/Remote sessions while preserving an explicit emergency rollback build
+  switch.
+- Kept real-device quality gates for two-device Nearby, different-network/TURN,
+  synchronization, reconnect, lifecycle, storage and data-usage behavior; public
+  availability does not replace those release-acceptance checks.
+
 ### Publication readiness
 
 - Advanced the candidate build number beyond the already-published `1.0.0+3`
   artifacts so no new binary can reuse the old Android versionCode.
-- Kept Watch Together disabled in public artifacts until its two-device,
-  different-network and TURN-relay acceptance gates pass on real devices.
+- Added CI contracts that reject stale build numbers and prevent Play/privacy,
+  media-service, advertising-permission and Together-public-state drift.
+- Release-mode validation now builds the same Together-enabled configuration that
+  public Android artifacts use, without duplicating an identical second APK build.
 - Release candidates must still pass release-mode APK/privacy/size validation,
   signed APK/AAB verification and physical-device acceptance before tagging.
 
