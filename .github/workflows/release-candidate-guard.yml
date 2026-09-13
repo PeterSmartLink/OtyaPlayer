@@ -29,6 +29,10 @@ jobs:
         shell: bash
         run: bash scripts/verify-release-candidate-version.sh
 
+      - name: Verify Play and privacy publication contract
+        shell: bash
+        run: bash scripts/verify-play-publication-contract.sh
+
       - name: Check publication contract files exist
         shell: bash
         run: |
