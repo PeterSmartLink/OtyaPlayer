@@ -285,7 +285,7 @@ jobs:
           echo "checksums=$OUT/checksums.txt" >> "$GITHUB_OUTPUT"
 
       - name: Save exact release evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Otya-${{ steps.release.outputs.tag }}
           if-no-files-found: error
