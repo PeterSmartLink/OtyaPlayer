@@ -1,15 +1,15 @@
 /// Release gate for the user-facing Watch Together capability.
 ///
-/// The current OTYA v1 product contract keeps Together private until its
-/// two-device, cross-network, TURN, sync/reconnect, data-usage, security and
-/// offline-playback gates pass. Internal validation builds may opt in with:
+/// Together is part of the public OTYA product. Public and release builds are
+/// enabled by default. The environment flag remains as an emergency rollback
+/// switch so a specifically-built recovery artifact can disable the feature
+/// without deleting the implementation.
 ///
-///   --dart-define=OTYA_ENABLE_WATCH_TOGETHER=true
+///   --dart-define=OTYA_ENABLE_WATCH_TOGETHER=false
 ///
-/// Public/release builds remain disabled by default.
 abstract final class TogetherReleaseGate {
   static bool get isPubliclyEnabled => const bool.fromEnvironment(
         'OTYA_ENABLE_WATCH_TOGETHER',
-        defaultValue: false,
+        defaultValue: true,
       );
 }
