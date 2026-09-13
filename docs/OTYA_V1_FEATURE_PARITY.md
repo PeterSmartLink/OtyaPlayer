@@ -37,21 +37,21 @@ Physical-device acceptance starts only after every applicable required row below
 
 ## Together — OTYA New Way
 
-Together is an intended next-release capability, but it is not allowed to become public merely because the source exists.
+Together is part of the public next-release product. Public Android candidates must ship it enabled. Source completion still does **not** prove device/network quality, so the acceptance checks below remain release gates rather than a reason to hide the feature.
 
 | Capability | Source status | Release evidence still required |
 | --- | --- | --- |
-| Nearby Together | implemented | two-device offline/local-network acceptance |
-| Anywhere/Remote Together | WebRTC peer/runtime/media bridge/ICE/control-plane implemented | different-network direct + TURN-relayed acceptance |
+| Nearby Together | implemented and public-on | two-device offline/local-network acceptance |
+| Anywhere/Remote Together | WebRTC peer/runtime/media bridge/ICE/control-plane implemented and public-on | different-network direct + TURN-relayed acceptance |
 | One host + one guest | implemented | real-device session acceptance |
 | Play/pause/seek synchronization | implemented | drift, reconnect and interruption acceptance |
 | Session chat, Moment messages and small reactions | implemented | lifecycle/reconnect acceptance |
 | After Watch lifecycle | implemented | real-device end/leave/rejoin acceptance |
 | Stream-only / optional save behavior | implemented in current runtime policy | storage/data-usage acceptance |
 | Local playback isolation | designed so transport failure does not own the local player | failure/recovery acceptance |
-| Size/privacy gate | CI builds a Together-enabled ARM64 release candidate | enabled candidate must remain <= 40,000,000 bytes and pass manifest/privacy verification |
+| Size/privacy gate | CI builds the public Together-enabled ARM64 release candidate | candidate must remain <= 40,000,000 bytes and pass manifest/privacy verification |
 
-`OTYA_ENABLE_WATCH_TOGETHER` remains false by default for public artifacts until the real-device/cross-network gates above pass. The release-mode workflow deliberately builds a second Together-enabled candidate so hidden transport code cannot bypass Android size/privacy verification.
+`OTYA_ENABLE_WATCH_TOGETHER` is true by default and the shared production Android release configuration explicitly passes it as true. An explicit false value is retained only as an emergency rollback build switch; it is not the normal public product configuration.
 
 ## Next / AI product boundary
 
@@ -76,8 +76,8 @@ These must stay retired or unavailable unless a separate product decision change
 1. The feature-surface regression contracts pass so required routes/actions cannot disappear silently.
 2. Security and backend validation are green on the final source-complete commits.
 3. `flutter analyze` and all unit/widget tests are green on the exact app head.
-4. Normal and Together-enabled ARM64 release-mode candidates build successfully.
-5. Both candidates pass Android manifest/privacy verification and the hard 40 MB size ceiling.
+4. The public Together-enabled ARM64 release-mode candidate builds successfully.
+5. The candidate passes Android manifest/privacy verification and the hard 40 MB size ceiling.
 6. No tracked service-account, signing key, private key, provider token, or other private credential exists in source.
 7. Remote-config flags and backend-advertised capabilities match actual supported product surfaces.
 
