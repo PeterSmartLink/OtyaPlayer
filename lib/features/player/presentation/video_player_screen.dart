@@ -356,7 +356,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Watch Together is still being tested and is not available in this build.',
+              'Watch Together is disabled in this emergency rollback build.',
             ),
             backgroundColor: AppColors.surface,
           ),
