@@ -138,7 +138,7 @@ class AnywhereTogetherPeer {
     } catch (error) {
       _emitError(_friendlyError(error));
       _setState(AnywhereTogetherPeerState.failed);
-      await _releaseNativeResources();
+      await close(notifyPeer: false, closeRoom: true);
       rethrow;
     }
   }
@@ -196,30 +196,41 @@ class AnywhereTogetherPeer {
     bool notifyPeer = true,
     bool closeRoom = true,
   }) async {
-    if (_closing || _state == AnywhereTogetherPeerState.closed) return;
+    if (_closing) return;
+    if (_state == AnywhereTogetherPeerState.closed) {
+      if (closeRoom) {
+        try {
+          await controlClient.closeRoom(roomId);
+        } catch (_) {}
+      }
+      return;
+    }
+
     _closing = true;
+    try {
+      if (notifyPeer) {
+        try {
+          await send('bye');
+        } catch (_) {}
+        try {
+          await controlClient.sendSignal(roomId: roomId, type: 'bye');
+        } catch (_) {}
+      }
 
-    if (notifyPeer) {
-      try {
-        await send('bye');
-      } catch (_) {}
-      try {
-        await controlClient.sendSignal(roomId: roomId, type: 'bye');
-      } catch (_) {}
+      _setState(AnywhereTogetherPeerState.closed);
+      await _releaseNativeResources();
+      if (closeRoom) {
+        try {
+          await controlClient.closeRoom(roomId);
+        } catch (_) {}
+      }
+    } finally {
+      _closing = false;
     }
-
-    _setState(AnywhereTogetherPeerState.closed);
-    await _releaseNativeResources();
-    if (closeRoom) {
-      try {
-        await controlClient.closeRoom(roomId);
-      } catch (_) {}
-    }
-    _closing = false;
   }
 
   Future<void> dispose() async {
-    await close(notifyPeer: false, closeRoom: false);
+    await close(notifyPeer: false, closeRoom: true);
     if (!_packets.isClosed) await _packets.close();
     if (!_states.isClosed) await _states.close();
     if (!_errors.isClosed) await _errors.close();
@@ -303,7 +314,7 @@ class AnywhereTogetherPeer {
     }
 
     if (packet.type == 'bye') {
-      unawaited(close(notifyPeer: false, closeRoom: false));
+      unawaited(close(notifyPeer: false, closeRoom: true));
       return;
     }
     if (!_packets.isClosed) _packets.add(packet);
@@ -332,9 +343,12 @@ class AnywhereTogetherPeer {
         if (_closing) return;
         _setState(AnywhereTogetherPeerState.failed);
         _emitError('Anywhere Together connection failed.');
+        unawaited(close(notifyPeer: false, closeRoom: true));
         return;
       case RTCPeerConnectionState.RTCPeerConnectionStateClosed:
-        if (!_closing) _setState(AnywhereTogetherPeerState.closed);
+        if (!_closing) {
+          unawaited(close(notifyPeer: false, closeRoom: true));
+        }
         return;
       case RTCPeerConnectionState.RTCPeerConnectionStateNew:
       case RTCPeerConnectionState.RTCPeerConnectionStateConnecting:
@@ -501,7 +515,7 @@ class AnywhereTogetherPeer {
         }
         return;
       case 'bye':
-        await close(notifyPeer: false, closeRoom: false);
+        await close(notifyPeer: false, closeRoom: true);
         return;
     }
   }
