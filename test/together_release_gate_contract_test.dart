@@ -10,12 +10,12 @@ void main() {
     'lib/features/player/presentation/video_player_screen.dart',
   ).readAsStringSync();
 
-  test('Watch Together remains disabled by default in public builds', () {
+  test('Watch Together is enabled by default in public builds', () {
     expect(gate, contains("'OTYA_ENABLE_WATCH_TOGETHER'"));
-    expect(gate, contains('defaultValue: false'));
+    expect(gate, contains('defaultValue: true'));
   });
 
-  test('video player gates both discovery and entry', () {
+  test('video player keeps the emergency release gate around discovery and entry', () {
     expect(
       player,
       contains('if (TogetherReleaseGate.isPubliclyEnabled)'),
@@ -24,13 +24,9 @@ void main() {
       player,
       contains('if (!TogetherReleaseGate.isPubliclyEnabled)'),
     );
-    expect(
-      player,
-      contains('Watch Together is still being tested'),
-    );
   });
 
-  test('Together implementation remains available for internal validation', () {
+  test('Together implementation remains available to public release builds', () {
     expect(player, contains('showTogetherEntrySheet(context)'));
     expect(player, contains('showNearbyTogetherHostSheet'));
     expect(player, contains('showAnywhereTogetherHostSheet'));
