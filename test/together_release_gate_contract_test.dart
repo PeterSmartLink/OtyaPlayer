@@ -24,6 +24,11 @@ void main() {
       player,
       contains('if (!TogetherReleaseGate.isPubliclyEnabled)'),
     );
+    expect(
+      player,
+      contains('Watch Together is disabled in this emergency rollback build.'),
+    );
+    expect(player, isNot(contains('still being tested')));
   });
 
   test('Together implementation remains available to public release builds', () {
