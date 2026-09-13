@@ -53,7 +53,9 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
   bool _pipInitialized = false;
   bool _handoffToAnotherVideo = false;
   bool _togetherGuestStreamActive = false;
+  bool _nearbyTogetherActive = false;
   bool _anywhereTogetherActive = false;
+  bool _leavingTogetherSession = false;
   Duration? _positionBeforeTogetherStream;
   late final Duration _savedPosition;
 
@@ -110,6 +112,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
         OtyaDatabase.instance.getSeekPosition(widget.mediaItem.id) ??
             Duration.zero;
     _position = _savedPosition;
+    _nearbyTogetherActive = NearbyTogetherRuntime.instance.active;
     _anywhereTogetherActive = AnywhereTogetherRuntime.instance.active;
     WidgetsBinding.instance.addObserver(this);
     NearbyTogetherRuntime.instance.addListener(_handleTogetherRuntimeChanged);
@@ -123,22 +126,39 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
 
   void _handleTogetherRuntimeChanged() {
     final runtime = NearbyTogetherRuntime.instance;
-    if (!mounted || !runtime.guestStreaming || _togetherGuestStreamActive) {
-      return;
-    }
+    if (!mounted) return;
+    final wasActive = _nearbyTogetherActive;
+    final activeChanged = wasActive != runtime.active;
+    final startsStream = runtime.guestStreaming && !_togetherGuestStreamActive;
+    final endedGuestStream = wasActive &&
+        !runtime.active &&
+        _togetherGuestStreamActive &&
+        !AnywhereTogetherRuntime.instance.active;
+    if (!activeChanged && !startsStream) return;
     setState(() {
-      _togetherGuestStreamActive = true;
-      _ccEnabled = false;
-      _position = Duration.zero;
-      _duration = runtime.guestPlan?.remoteMedia.duration ?? Duration.zero;
+      _nearbyTogetherActive = runtime.active;
+      if (startsStream) {
+        _togetherGuestStreamActive = true;
+        _ccEnabled = false;
+        _position = Duration.zero;
+        _duration = runtime.guestPlan?.remoteMedia.duration ?? Duration.zero;
+      }
     });
+    if (endedGuestStream && !_leavingTogetherSession) {
+      unawaited(_leaveTogetherSession());
+    }
   }
 
   void _handleAnywhereTogetherRuntimeChanged() {
     final runtime = AnywhereTogetherRuntime.instance;
     if (!mounted) return;
-    final activeChanged = _anywhereTogetherActive != runtime.active;
+    final wasActive = _anywhereTogetherActive;
+    final activeChanged = wasActive != runtime.active;
     final startsStream = runtime.guestStreaming && !_togetherGuestStreamActive;
+    final endedGuestStream = wasActive &&
+        !runtime.active &&
+        _togetherGuestStreamActive &&
+        !NearbyTogetherRuntime.instance.active;
     if (!activeChanged && !startsStream) return;
     setState(() {
       _anywhereTogetherActive = runtime.active;
@@ -151,6 +171,9 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
         );
       }
     });
+    if (endedGuestStream && !_leavingTogetherSession) {
+      unawaited(_leaveTogetherSession());
+    }
   }
 
   Future<void> _initPip() async {
@@ -606,37 +629,55 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
   }
 
   Future<void> _leaveTogetherSession() async {
-    final restoreStream = _togetherGuestStreamActive;
-    final restorePosition = _positionBeforeTogetherStream ?? _savedPosition;
-    final shouldResume = _isPlaying;
-    final player = _player;
-
-    await NearbyTogetherRuntime.instance.stop();
-    await AnywhereTogetherRuntime.instance.stop();
-
-    if (!restoreStream || player == null || !mounted) return;
+    if (_leavingTogetherSession) return;
+    _leavingTogetherSession = true;
     try {
-      await player.open(Media(widget.mediaItem.filePath), play: false);
-      if (restorePosition > Duration.zero) {
-        await player.seek(restorePosition);
+      final restoreStream = _togetherGuestStreamActive;
+      final restorePosition = _positionBeforeTogetherStream ?? _savedPosition;
+      final shouldResume = _isPlaying;
+      final player = _player;
+
+      await NearbyTogetherRuntime.instance.stop();
+      await AnywhereTogetherRuntime.instance.stop();
+
+      if (!restoreStream || !mounted) return;
+      if (player == null) {
+        setState(() {
+          _togetherGuestStreamActive = false;
+          _positionBeforeTogetherStream = null;
+        });
+        return;
       }
-      if (shouldResume) await player.play();
-      if (!mounted) return;
-      setState(() {
-        _togetherGuestStreamActive = false;
-        _positionBeforeTogetherStream = null;
-        _position = restorePosition;
-        _duration = widget.mediaItem.duration ?? Duration.zero;
-        _ccEnabled = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('OTYA left Together, but could not restore the local video.'),
-          backgroundColor: AppColors.error,
-        ),
-      );
+
+      try {
+        await player.open(Media(widget.mediaItem.filePath), play: false);
+        if (restorePosition > Duration.zero) {
+          await player.seek(restorePosition);
+        }
+        if (shouldResume) await player.play();
+        if (!mounted) return;
+        setState(() {
+          _togetherGuestStreamActive = false;
+          _positionBeforeTogetherStream = null;
+          _position = restorePosition;
+          _duration = widget.mediaItem.duration ?? Duration.zero;
+          _ccEnabled = false;
+        });
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _togetherGuestStreamActive = false;
+          _positionBeforeTogetherStream = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('OTYA left Together, but could not restore the local video.'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } finally {
+      _leavingTogetherSession = false;
     }
   }
 
@@ -687,38 +728,38 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
               ),
             if (TogetherReleaseGate.isPubliclyEnabled)
               ListTile(
-              leading: const Icon(
-                Icons.people_alt_rounded,
-                color: AppColors.accent,
-                size: 22,
-              ),
-              title: Text(
-                (NearbyTogetherRuntime.instance.active ||
-                        AnywhereTogetherRuntime.instance.active)
-                    ? 'Together'
-                    : 'Watch Together',
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontFamily: 'Inter',
-                  fontWeight: FontWeight.w600,
+                leading: const Icon(
+                  Icons.people_alt_rounded,
+                  color: AppColors.accent,
+                  size: 22,
                 ),
-              ),
-              subtitle: Text(
-                (NearbyTogetherRuntime.instance.active ||
-                        AnywhereTogetherRuntime.instance.active)
-                    ? 'Open the active session'
-                    : 'Watch nearby or privately over the internet',
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
-                  fontFamily: 'Inter',
-                  fontSize: 12,
+                title: Text(
+                  (NearbyTogetherRuntime.instance.active ||
+                          AnywhereTogetherRuntime.instance.active)
+                      ? 'Together'
+                      : 'Watch Together',
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontFamily: 'Inter',
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
+                subtitle: Text(
+                  (NearbyTogetherRuntime.instance.active ||
+                          AnywhereTogetherRuntime.instance.active)
+                      ? 'Open the active session'
+                      : 'Watch nearby or privately over the internet',
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontFamily: 'Inter',
+                    fontSize: 12,
+                  ),
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _showTogetherEntry();
+                },
               ),
-              onTap: () async {
-                Navigator.pop(context);
-                await _showTogetherEntry();
-              },
-            ),
             ListTile(
               leading: const Icon(
                 Icons.info_outline_rounded,
@@ -1142,36 +1183,36 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
               child: IgnorePointer(
                 ignoring: !_controlsVisible,
                 child: VideoPlayerControlsOverlay(
-                    title: _visibleTitle,
-                    ccEnabled: _ccEnabled,
-                    isMuted: _isMuted,
-                    isPlaying: _isPlaying,
-                    position: _position,
-                    duration: _duration,
-                    playbackSpeed: _playbackSpeed,
-                    aspectRatioLabel: _aspectRatioLabels[_aspectRatioIndex],
-                    onBack: () => unawaited(_leavePlayer()),
-                    onToggleSubtitles: _toggleSubtitles,
-                    onAudioTracks: _showAudioTracks,
-                    onEqualizer: () {
-                      context.push('/player/equalizer');
-                    },
-                    onMoreOptions: _showMoreOptions,
-                    onToggleMute: _toggleMute,
-                    onLock: _lockControls,
-                    onRotate: _toggleOrientation,
-                    onSeekStart: _seekStart,
-                    onSeekChanged: _seekChanged,
-                    onSeekEnd: _seekEnd,
-                    onRewind: _rewind,
-                    onPrevious: () => unawaited(_previous()),
-                    onPlayPause: _togglePlayback,
-                    onNext: () => unawaited(_next()),
-                    onForward: _forward,
-                    onSpeed: _showSpeedPicker,
-                    onAspectRatio: _cycleAspectRatio,
-                    onPip: _enterPip,
-                  ),
+                  title: _visibleTitle,
+                  ccEnabled: _ccEnabled,
+                  isMuted: _isMuted,
+                  isPlaying: _isPlaying,
+                  position: _position,
+                  duration: _duration,
+                  playbackSpeed: _playbackSpeed,
+                  aspectRatioLabel: _aspectRatioLabels[_aspectRatioIndex],
+                  onBack: () => unawaited(_leavePlayer()),
+                  onToggleSubtitles: _toggleSubtitles,
+                  onAudioTracks: _showAudioTracks,
+                  onEqualizer: () {
+                    context.push('/player/equalizer');
+                  },
+                  onMoreOptions: _showMoreOptions,
+                  onToggleMute: _toggleMute,
+                  onLock: _lockControls,
+                  onRotate: _toggleOrientation,
+                  onSeekStart: _seekStart,
+                  onSeekChanged: _seekChanged,
+                  onSeekEnd: _seekEnd,
+                  onRewind: _rewind,
+                  onPrevious: () => unawaited(_previous()),
+                  onPlayPause: _togglePlayback,
+                  onNext: () => unawaited(_next()),
+                  onForward: _forward,
+                  onSpeed: _showSpeedPicker,
+                  onAspectRatio: _cycleAspectRatio,
+                  onPip: _enterPip,
+                ),
               ),
             ),
           if (!_isLocked)
