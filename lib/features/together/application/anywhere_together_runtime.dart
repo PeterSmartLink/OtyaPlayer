@@ -129,10 +129,10 @@ class AnywhereTogetherRuntime extends ChangeNotifier {
         role: AnywhereTogetherRole.host,
       );
       final mediaHost = AnywhereTogetherMediaHost(peer: peer);
-      await mediaHost.start(File(mediaItem.filePath));
-
       _peer = peer;
       _mediaHost = mediaHost;
+      await mediaHost.start(File(mediaItem.filePath));
+
       _descriptor = descriptor;
       _localParticipantId = _participantId(
         creation.room.host,
@@ -181,6 +181,7 @@ class AnywhereTogetherRuntime extends ChangeNotifier {
       return _invite!;
     } catch (error) {
       _lastError = _friendlyError(error);
+      await stop(notify: false);
       rethrow;
     } finally {
       _finishStart();
@@ -293,6 +294,7 @@ class AnywhereTogetherRuntime extends ChangeNotifier {
       return plan;
     } catch (error) {
       _lastError = _friendlyError(error);
+      await stop(notify: false);
       rethrow;
     } finally {
       _finishStart();
@@ -494,7 +496,8 @@ class AnywhereTogetherRuntime extends ChangeNotifier {
   Future<AnywhereMediaDescriptor> _waitForDescriptor() async {
     final existing = _descriptor;
     if (existing != null) return existing;
-    final completer = _descriptorCompleter ??= Completer<AnywhereMediaDescriptor>();
+    final completer =
+        _descriptorCompleter ??= Completer<AnywhereMediaDescriptor>();
     return completer.future.timeout(
       const Duration(seconds: 15),
       onTimeout: () => throw TimeoutException(
@@ -520,16 +523,19 @@ class AnywhereTogetherRuntime extends ChangeNotifier {
           _room.connected(TogetherConnectionPath.internet, now);
         } catch (_) {}
       }
-    } else if (peerState == AnywhereTogetherPeerState.reconnecting ||
-        peerState == AnywhereTogetherPeerState.failed) {
+    } else if (peerState == AnywhereTogetherPeerState.reconnecting) {
       if (session != null && session.isActive) {
         _setRemoteParticipantConnected(false, now);
         try {
           _room.reconnecting(now);
         } catch (_) {}
       }
+    } else if (peerState == AnywhereTogetherPeerState.failed) {
+      _setRemoteParticipantConnected(false, now);
     } else if (peerState == AnywhereTogetherPeerState.closed) {
       _setRemoteParticipantConnected(false, now);
+      unawaited(stop());
+      return;
     }
     notifyListeners();
   }
@@ -692,7 +698,9 @@ class AnywhereTogetherRuntime extends ChangeNotifier {
   ) {
     final session = state.session;
     final text = _text(packet.payload['text']);
-    if (session == null || text == null || text.length > TogetherMessage.maxTextLength) {
+    if (session == null ||
+        text == null ||
+        text.length > TogetherMessage.maxTextLength) {
       return;
     }
     _room.receiveMessage(
