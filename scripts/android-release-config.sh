@@ -12,6 +12,7 @@ OTYA_GOOGLE_WEB_CLIENT_ID='82776565585-obr8k53b8n6djsggissv8qne81cm3u5u.apps.goo
 OTYA_FIREBASE_APP_ID='1:82776565585:android:085cf9b4eecb76e9535570'
 OTYA_FIREBASE_MESSAGING_SENDER_ID='82776565585'
 OTYA_FIREBASE_PROJECT_ID='otya-player'
+OTYA_ENABLE_WATCH_TOGETHER='true'
 
 configure_otya_release_defines() {
   local self_update="${1:-${OTYA_SELF_UPDATE:-true}}"
@@ -25,6 +26,7 @@ configure_otya_release_defines() {
 
   OTYA_RELEASE_DART_DEFINES=(
     "--dart-define=SELF_UPDATE=${self_update}"
+    "--dart-define=OTYA_ENABLE_WATCH_TOGETHER=${OTYA_ENABLE_WATCH_TOGETHER}"
     "--dart-define=GOOGLE_WEB_CLIENT_ID=${OTYA_GOOGLE_WEB_CLIENT_ID}"
     "--dart-define=FIREBASE_API_KEY=${FIREBASE_API_KEY}"
     "--dart-define=FIREBASE_APP_ID=${OTYA_FIREBASE_APP_ID}"
