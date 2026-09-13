@@ -3,6 +3,29 @@
 This changelog describes public Otya releases. Earlier prototype version labels
 are preserved in Git history and are not public Otya releases.
 
+## [1.0.0+4] — release candidate
+
+### Reliability and privacy
+
+- Hardened Android audio-focus and interruption ownership so pause/resume behavior
+  stays bound to the exact active player across calls, headsets, Bluetooth and
+  app lifecycle changes.
+- Added notification-permission recovery that can return users to Android app
+  settings when notifications were previously denied.
+- Redacted local media paths and app-private paths from crash diagnostics before
+  reports leave the device.
+- Kept the reviewed immutable MediaKit Android disposal-order fix pinned across
+  the direct and overridden dependency graph.
+
+### Publication readiness
+
+- Advanced the candidate build number beyond the already-published `1.0.0+3`
+  artifacts so no new binary can reuse the old Android versionCode.
+- Kept Watch Together disabled in public artifacts until its two-device,
+  different-network and TURN-relay acceptance gates pass on real devices.
+- Release candidates must still pass release-mode APK/privacy/size validation,
+  signed APK/AAB verification and physical-device acceptance before tagging.
+
 ## [1.0.0] — 2026-09-03
 
 ### Highlights
