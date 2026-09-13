@@ -12,6 +12,9 @@ void main() {
   final sheet = File(
     'lib/features/together/presentation/anywhere_together_sheet.dart',
   ).readAsStringSync();
+  final player = File(
+    'lib/features/player/presentation/video_player_screen.dart',
+  ).readAsStringSync();
 
   test('Together discovers invitations addressed to the signed-in user', () {
     expect(client, contains('/api/together/invites'));
@@ -21,8 +24,8 @@ void main() {
   });
 
   test('pending invitation joins without copying the secret link', () {
-    expect(client, contains("normalizedInviteToken.isEmpty"));
-    expect(client, contains("<String, Object?>{}"));
+    expect(client, contains('normalizedInviteToken.isEmpty'));
+    expect(client, contains('<String, Object?>{}'));
     expect(runtime, contains('String inviteToken = \'\''));
     expect(sheet, contains('_joinPending(TogetherRemoteRoom room)'));
     expect(sheet, contains('child: const Text(\'Join\')'));
@@ -35,7 +38,7 @@ void main() {
   });
 
   test('Together rejects malformed control identifiers before network work', () {
-    expect(client, contains("RegExp(r'^[A-Za-z0-9_-]{20,32}\\$')"));
+    expect(client, contains(r"RegExp(r'^[A-Za-z0-9_-]{20,32}$')"));
     expect(client, contains('identity.isValidUsername(username)'));
     expect(client, contains('normalizedInviteToken.length > 256'));
     expect(client, contains('normalizedAfter.length > 64'));
@@ -46,6 +49,15 @@ void main() {
 
   test('Together drops control-plane signals from another room', () {
     expect(client, contains('signal.roomId == normalizedRoomId'));
+  });
+
+  test('remote Together end restores local playback exactly once', () {
+    expect(player, contains('bool _leavingTogetherSession = false;'));
+    expect(player, contains('final endedGuestStream = wasActive &&'));
+    expect(player, contains('unawaited(_leaveTogetherSession());'));
+    expect(player, contains('if (_leavingTogetherSession) return;'));
+    expect(player, contains('await player.open(Media(widget.mediaItem.filePath), play: false);'));
+    expect(player, contains('_position = restorePosition;'));
   });
 
   test('join surface explains local-copy data saving', () {
