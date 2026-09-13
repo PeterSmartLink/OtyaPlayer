@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../../../core/config/environment.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../core/services/http_client.dart';
+import '../../../core/services/otya_identity_service.dart';
 
 class TogetherRoomParticipantView {
   final String role;
@@ -34,7 +35,9 @@ class TogetherRoomParticipantView {
       role: text(json['role']),
       connected: json['connected'] == true,
       otyaId: text(json['otya_id']).toUpperCase(),
-      username: text(json['username']).replaceFirst(RegExp(r'^@+'), '').toLowerCase(),
+      username: text(json['username'])
+          .replaceFirst(RegExp(r'^@+'), '')
+          .toLowerCase(),
       displayName: optional(json['name']),
       avatarUrl: optional(json['avatar_url']),
     );
@@ -104,7 +107,8 @@ class TogetherSignal {
         roomId: (json['room_id'] as String? ?? '').trim(),
         type: (json['type'] as String? ?? '').trim().toLowerCase(),
         payload: json['payload'],
-        senderRole: (json['sender_role'] as String? ?? '').trim().toLowerCase(),
+        senderRole:
+            (json['sender_role'] as String? ?? '').trim().toLowerCase(),
         createdAt: DateTime.tryParse(json['created_at'] as String? ?? ''),
       );
 }
@@ -131,33 +135,40 @@ class TogetherControlClient {
 
   static const _timeout = Duration(seconds: 15);
   static const _allowedSignalTypes = {'offer', 'answer', 'ice', 'bye'};
+  static final RegExp _roomIdPattern = RegExp(r'^[A-Za-z0-9_-]{20,32}$');
 
-  Uri get _roomsUri => Uri.parse('${Environment.workerUrl}/api/together/rooms');
-  Uri get _invitesUri => Uri.parse('${Environment.workerUrl}/api/together/invites');
+  Uri get _roomsUri =>
+      Uri.parse('${Environment.workerUrl}/api/together/rooms');
+  Uri get _invitesUri =>
+      Uri.parse('${Environment.workerUrl}/api/together/invites');
 
   Future<TogetherControlResult<TogetherRoomCreation>> createRoom(
     String inviteUsername,
   ) async {
-    final auth = await _authorization();
-    if (auth == null) return _signedOut();
-
-    final username = inviteUsername.trim().replaceFirst(RegExp(r'^@+'), '').toLowerCase();
-    if (username.isEmpty) {
+    final identity = OtyaIdentityService.instance;
+    final username = identity.normalizeUsername(inviteUsername);
+    if (!identity.isValidUsername(username)) {
       return const TogetherControlResult(
-        error: 'Choose someone to watch with.',
+        error:
+            'Use 3–24 characters, start with a letter, and use only letters, numbers or underscore.',
         code: 'INVALID_USERNAME',
       );
     }
 
+    final auth = await _authorization();
+    if (auth == null) return _signedOut();
+
     try {
-      final response = await AppHttpClient.instance.client.post(
-        _roomsUri,
-        headers: {
-          'Authorization': auth,
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({'invite_username': username}),
-      ).timeout(_timeout);
+      final response = await AppHttpClient.instance.client
+          .post(
+            _roomsUri,
+            headers: {
+              'Authorization': auth,
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({'invite_username': username}),
+          )
+          .timeout(_timeout);
       final data = _decode(response.body);
       if (response.statusCode != 201 || data?['room'] is! Map) {
         return _error(data, 'Could not create Together right now.');
@@ -186,18 +197,29 @@ class TogetherControlClient {
     required String roomId,
     String inviteToken = '',
   }) async {
+    final normalizedRoomId = roomId.trim();
+    if (!_roomIdPattern.hasMatch(normalizedRoomId)) return _invalidRoom();
+    final normalizedInviteToken = inviteToken.trim();
+    if (normalizedInviteToken.length > 256) return _invalidInvite();
+
     final auth = await _authorization();
     if (auth == null) return _signedOut();
 
     try {
-      final response = await AppHttpClient.instance.client.post(
-        _roomUri(roomId, 'join'),
-        headers: {
-          'Authorization': auth,
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(inviteToken.trim().isEmpty ? <String, Object?>{} : {'invite_token': inviteToken}),
-      ).timeout(_timeout);
+      final response = await AppHttpClient.instance.client
+          .post(
+            _roomUri(normalizedRoomId, 'join'),
+            headers: {
+              'Authorization': auth,
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(
+              normalizedInviteToken.isEmpty
+                  ? <String, Object?>{}
+                  : {'invite_token': normalizedInviteToken},
+            ),
+          )
+          .timeout(_timeout);
       final data = _decode(response.body);
       if (response.statusCode != 200 || data?['room'] is! Map) {
         return _error(data, 'Could not join Together.');
@@ -212,36 +234,45 @@ class TogetherControlClient {
     }
   }
 
-  Future<TogetherControlResult<List<TogetherRemoteRoom>>> pendingInvites() async {
-  final auth = await _authorization();
-  if (auth == null) return _signedOut();
-  try {
-    final response = await AppHttpClient.instance.client.get(
-      _invitesUri,
-      headers: {'Authorization': auth},
-    ).timeout(_timeout);
-    final data = _decode(response.body);
-    if (response.statusCode != 200 || data?['invites'] is! List) {
-      return _error(data, 'Could not load Together invitations.');
+  Future<TogetherControlResult<List<TogetherRemoteRoom>>>
+      pendingInvites() async {
+    final auth = await _authorization();
+    if (auth == null) return _signedOut();
+    try {
+      final response = await AppHttpClient.instance.client.get(
+        _invitesUri,
+        headers: {'Authorization': auth},
+      ).timeout(_timeout);
+      final data = _decode(response.body);
+      if (response.statusCode != 200 || data?['invites'] is! List) {
+        return _error(data, 'Could not load Together invitations.');
+      }
+      final invites = (data!['invites'] as List)
+          .whereType<Map>()
+          .map(
+            (item) =>
+                TogetherRemoteRoom.fromJson(Map<String, dynamic>.from(item)),
+          )
+          .where((room) => _roomIdPattern.hasMatch(room.roomId))
+          .toList(growable: false);
+      return TogetherControlResult(value: invites);
+    } catch (_) {
+      return _networkError();
     }
-    final invites = (data!['invites'] as List)
-        .whereType<Map>()
-        .map((item) => TogetherRemoteRoom.fromJson(Map<String, dynamic>.from(item)))
-        .where((room) => room.roomId.isNotEmpty)
-        .toList(growable: false);
-    return TogetherControlResult(value: invites);
-  } catch (_) {
-    return _networkError();
   }
-}
 
-  Future<TogetherControlResult<TogetherRemoteRoom>> getRoom(String roomId) async {
+  Future<TogetherControlResult<TogetherRemoteRoom>> getRoom(
+    String roomId,
+  ) async {
+    final normalizedRoomId = roomId.trim();
+    if (!_roomIdPattern.hasMatch(normalizedRoomId)) return _invalidRoom();
+
     final auth = await _authorization();
     if (auth == null) return _signedOut();
 
     try {
       final response = await AppHttpClient.instance.client.get(
-        _roomUri(roomId),
+        _roomUri(normalizedRoomId),
         headers: {'Authorization': auth},
       ).timeout(_timeout);
       final data = _decode(response.body);
@@ -259,12 +290,15 @@ class TogetherControlClient {
   }
 
   Future<TogetherControlResult<void>> closeRoom(String roomId) async {
+    final normalizedRoomId = roomId.trim();
+    if (!_roomIdPattern.hasMatch(normalizedRoomId)) return _invalidRoom();
+
     final auth = await _authorization();
     if (auth == null) return _signedOut();
 
     try {
       final response = await AppHttpClient.instance.client.delete(
-        _roomUri(roomId),
+        _roomUri(normalizedRoomId),
         headers: {'Authorization': auth},
       ).timeout(_timeout);
       final data = _decode(response.body);
@@ -282,8 +316,8 @@ class TogetherControlClient {
     required String type,
     Object? payload,
   }) async {
-    final auth = await _authorization();
-    if (auth == null) return _signedOut();
+    final normalizedRoomId = roomId.trim();
+    if (!_roomIdPattern.hasMatch(normalizedRoomId)) return _invalidRoom();
 
     final normalizedType = type.trim().toLowerCase();
     if (!_allowedSignalTypes.contains(normalizedType)) {
@@ -293,15 +327,20 @@ class TogetherControlClient {
       );
     }
 
+    final auth = await _authorization();
+    if (auth == null) return _signedOut();
+
     try {
-      final response = await AppHttpClient.instance.client.post(
-        _roomUri(roomId, 'signals'),
-        headers: {
-          'Authorization': auth,
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({'type': normalizedType, 'payload': payload}),
-      ).timeout(_timeout);
+      final response = await AppHttpClient.instance.client
+          .post(
+            _roomUri(normalizedRoomId, 'signals'),
+            headers: {
+              'Authorization': auth,
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({'type': normalizedType, 'payload': payload}),
+          )
+          .timeout(_timeout);
       final data = _decode(response.body);
       if (response.statusCode != 202) {
         return _error(data, 'Could not send Together connection data.');
@@ -323,14 +362,24 @@ class TogetherControlClient {
     required String roomId,
     String? after,
   }) async {
+    final normalizedRoomId = roomId.trim();
+    if (!_roomIdPattern.hasMatch(normalizedRoomId)) return _invalidRoom();
+    final normalizedAfter = after?.trim();
+    if (normalizedAfter != null && normalizedAfter.length > 64) {
+      return const TogetherControlResult(
+        error: 'Invalid Together signal cursor.',
+        code: 'INVALID_SIGNAL_CURSOR',
+      );
+    }
+
     final auth = await _authorization();
     if (auth == null) return _signedOut();
 
     try {
-      final base = _roomUri(roomId, 'signals');
-      final uri = after == null || after.isEmpty
+      final base = _roomUri(normalizedRoomId, 'signals');
+      final uri = normalizedAfter == null || normalizedAfter.isEmpty
           ? base
-          : base.replace(queryParameters: {'after': after});
+          : base.replace(queryParameters: {'after': normalizedAfter});
       final response = await AppHttpClient.instance.client.get(
         uri,
         headers: {'Authorization': auth},
@@ -341,8 +390,17 @@ class TogetherControlClient {
       }
       final signals = (data!['signals'] as List)
           .whereType<Map>()
-          .map((item) => TogetherSignal.fromJson(Map<String, dynamic>.from(item)))
-          .where((signal) => signal.id.isNotEmpty && _allowedSignalTypes.contains(signal.type))
+          .map(
+            (item) => TogetherSignal.fromJson(
+              Map<String, dynamic>.from(item),
+            ),
+          )
+          .where(
+            (signal) =>
+                signal.id.isNotEmpty &&
+                signal.roomId == normalizedRoomId &&
+                _allowedSignalTypes.contains(signal.type),
+          )
           .toList(growable: false);
       return TogetherControlResult(value: signals);
     } catch (_) {
@@ -353,7 +411,9 @@ class TogetherControlClient {
   Uri _roomUri(String roomId, [String? action]) {
     final safeRoom = Uri.encodeComponent(roomId.trim());
     final suffix = action == null ? '' : '/${Uri.encodeComponent(action)}';
-    return Uri.parse('${Environment.workerUrl}/api/together/rooms/$safeRoom$suffix');
+    return Uri.parse(
+      '${Environment.workerUrl}/api/together/rooms/$safeRoom$suffix',
+    );
   }
 
   Future<String?> _authorization() async {
@@ -382,12 +442,26 @@ class TogetherControlClient {
     );
   }
 
-  static TogetherControlResult<T> _signedOut<T>() => const TogetherControlResult(
+  static TogetherControlResult<T> _invalidRoom<T>() =>
+      const TogetherControlResult(
+        error: 'Invalid Together room identifier.',
+        code: 'INVALID_ROOM_ID',
+      );
+
+  static TogetherControlResult<T> _invalidInvite<T>() =>
+      const TogetherControlResult(
+        error: 'Invalid or expired Together invite.',
+        code: 'INVALID_INVITE',
+      );
+
+  static TogetherControlResult<T> _signedOut<T>() =>
+      const TogetherControlResult(
         error: 'Sign in to use Anywhere Together.',
         code: 'SIGN_IN_REQUIRED',
       );
 
-  static TogetherControlResult<T> _networkError<T>() => const TogetherControlResult(
+  static TogetherControlResult<T> _networkError<T>() =>
+      const TogetherControlResult(
         error: 'Could not reach OTYA right now.',
         code: 'NETWORK_ERROR',
       );
