@@ -18,7 +18,7 @@ env:
 
 jobs:
   release_mode:
-    name: Build release-mode publication candidate
+    name: Build public Together-enabled publication candidate
     runs-on: ubuntu-latest
     timeout-minutes: 70
 
@@ -93,6 +93,10 @@ jobs:
         run: |
           set -euo pipefail
           source scripts/android-release-config.sh
+          test "$OTYA_ENABLE_WATCH_TOGETHER" = 'true' || {
+            echo 'ERROR: public release-mode validation must build with Together enabled'
+            exit 1
+          }
           mkdir -p build/release-mode-evidence
 
           max_attempts=3
@@ -131,7 +135,7 @@ jobs:
 
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk build/Otya-release-mode-test.apk
 
-      - name: Verify final release-mode Android binary and size budget
+      - name: Verify public release-mode Android binary and size budget
         shell: bash
         run: |
           set -euo pipefail
@@ -139,75 +143,12 @@ jobs:
           SIZE="$(stat -c%s "$APK")"
           printf '%s\n' "$SIZE" > build/release-mode-evidence/apk-size-bytes.txt
           test "$SIZE" -le 40000000 || {
-            echo "ERROR: ARM64 publication-equivalent APK is $SIZE bytes; Otya budget is 40000000 bytes"
+            echo "ERROR: public ARM64 publication-equivalent APK is $SIZE bytes; Otya budget is 40000000 bytes"
             exit 1
           }
           bash scripts/verify-android-release-apk.sh \
             "$APK" \
             build/release-mode-evidence
-
-      - name: Build Watch Together enabled release-mode candidate
-        env:
-          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
-          OTYA_ALLOW_DEBUG_SIGNING: 'true'
-          OTYA_SELF_UPDATE: 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          source scripts/android-release-config.sh
-          mkdir -p build/together-release-evidence
-
-          max_attempts=3
-          attempt=1
-          while true; do
-            log="build/together-release-evidence/build-attempt-${attempt}.log"
-            set +e
-            flutter build apk --release --split-per-abi \
-              --target-platform android-arm64 \
-              "${OTYA_RELEASE_DART_DEFINES[@]}" \
-              --dart-define=OTYA_ENABLE_WATCH_TOGETHER=true 2>&1 | tee "$log"
-            status=${PIPESTATUS[0]}
-            set -e
-
-            if [ "$status" -eq 0 ]; then
-              printf '%s\n' "$attempt" > build/together-release-evidence/successful-build-attempt.txt
-              break
-            fi
-
-            if [ "$attempt" -ge "$max_attempts" ]; then
-              echo "ERROR: Together-enabled release-mode build failed after ${attempt} attempts"
-              exit "$status"
-            fi
-
-            if ! grep -Eqi \
-              'HTTP response code: (408|429|5[0-9]{2})|HTTP (408|429|5[0-9]{2})|timed? out|timeout|connection (reset|refused|closed)|temporary failure|could not resolve host|name or service not known|network is unreachable|remote host terminated' \
-              "$log"; then
-              echo "ERROR: deterministic Together-enabled build failure; not retrying"
-              exit "$status"
-            fi
-
-            delay=$((attempt * 10))
-            echo "Transient upstream/network failure detected; retrying in ${delay}s (${attempt}/${max_attempts})"
-            sleep "$delay"
-            attempt=$((attempt + 1))
-          done
-
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk build/Otya-together-release-mode-test.apk
-
-      - name: Verify Watch Together candidate privacy and size budget
-        shell: bash
-        run: |
-          set -euo pipefail
-          APK=build/Otya-together-release-mode-test.apk
-          SIZE="$(stat -c%s "$APK")"
-          printf '%s\n' "$SIZE" > build/together-release-evidence/apk-size-bytes.txt
-          test "$SIZE" -le 40000000 || {
-            echo "ERROR: Together-enabled ARM64 APK is $SIZE bytes; Otya hard ceiling is 40000000 bytes"
-            exit 1
-          }
-          bash scripts/verify-android-release-apk.sh \
-            "$APK" \
-            build/together-release-evidence
 
       - name: Save release-mode evidence
         if: github.event_name == 'workflow_dispatch'
@@ -218,6 +159,4 @@ jobs:
           retention-days: 3
           path: |
             build/Otya-release-mode-test.apk
-            build/Otya-together-release-mode-test.apk
             build/release-mode-evidence/**
-            build/together-release-evidence/**
