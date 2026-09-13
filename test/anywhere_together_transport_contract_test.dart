@@ -80,4 +80,40 @@ void main() {
       isTrue,
     );
   });
+
+  test('terminal peer lifecycle closes the authenticated server room', () {
+    final peerSource = File(
+      'lib/features/together/data/anywhere_together_peer.dart',
+    ).readAsStringSync();
+
+    expect(
+      peerSource,
+      contains('await close(notifyPeer: false, closeRoom: true);'),
+    );
+    expect(
+      peerSource,
+      contains('await controlClient.closeRoom(roomId);'),
+    );
+    expect(
+      peerSource,
+      contains('unawaited(close(notifyPeer: false, closeRoom: true));'),
+    );
+  });
+
+  test('terminal peer closure converges the in-app runtime to stopped', () {
+    final runtimeSource = File(
+      'lib/features/together/application/anywhere_together_runtime.dart',
+    ).readAsStringSync();
+
+    expect(
+      runtimeSource,
+      contains('peerState == AnywhereTogetherPeerState.reconnecting'),
+    );
+    expect(
+      runtimeSource,
+      contains('peerState == AnywhereTogetherPeerState.closed'),
+    );
+    expect(runtimeSource, contains('unawaited(stop());'));
+    expect(runtimeSource, contains('await stop(notify: false);'));
+  });
 }
