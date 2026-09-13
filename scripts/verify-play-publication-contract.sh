@@ -5,9 +5,10 @@ MANIFEST='android/app/src/main/AndroidManifest.xml'
 GRADLE='android/app/build.gradle'
 PRIVACY='docs/PRIVACY_POLICY.md'
 TOGETHER='lib/features/together/application/together_release_gate.dart'
+RELEASE_CONFIG='scripts/android-release-config.sh'
 PLAY_WORKFLOW='.github/workflows/play-closed-test.yml'
 
-for file in "$MANIFEST" "$GRADLE" "$PRIVACY" "$TOGETHER" "$PLAY_WORKFLOW"; do
+for file in "$MANIFEST" "$GRADLE" "$PRIVACY" "$TOGETHER" "$RELEASE_CONFIG" "$PLAY_WORKFLOW"; do
   test -s "$file" || { echo "ERROR: required publication contract file is missing: $file"; exit 1; }
 done
 
@@ -67,8 +68,16 @@ grep -Fq "'OTYA_ENABLE_WATCH_TOGETHER'" "$TOGETHER" || {
   echo 'ERROR: Together release gate is missing.'
   exit 1
 }
-grep -Fq 'defaultValue: false' "$TOGETHER" || {
-  echo 'ERROR: Watch Together must remain disabled by default until device acceptance passes.'
+grep -Fq 'defaultValue: true' "$TOGETHER" || {
+  echo 'ERROR: Watch Together must remain enabled by default in public builds.'
+  exit 1
+}
+grep -Fq "OTYA_ENABLE_WATCH_TOGETHER='true'" "$RELEASE_CONFIG" || {
+  echo 'ERROR: production Android release configuration must explicitly enable Watch Together.'
+  exit 1
+}
+grep -Fq 'OTYA_ENABLE_WATCH_TOGETHER=${OTYA_ENABLE_WATCH_TOGETHER}' "$RELEASE_CONFIG" || {
+  echo 'ERROR: production Android release defines are not carrying the Watch Together flag.'
   exit 1
 }
 
