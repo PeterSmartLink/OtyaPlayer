@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import 'album_art_service.dart';
+import 'notification_service.dart';
 import 'audio_handler.dart';
 
 /// Owns system Now Playing metadata for notification shade, lock screen,
@@ -261,6 +262,10 @@ class MediaNotificationService {
     required bool isPlaying,
     String? albumArtPath,
   }) async {
+    // This runs only after the person starts playback. Asking here, instead of
+    // behind startup dialogs, lets Android show the real Now Playing surface
+    // and lock-screen controls on Android 13+ without interrupting onboarding.
+    unawaited(NotificationService.instance.requestPermissionOnce());
     final generation = ++_metadataGeneration;
     if (!_initialized) await init();
     await _ensureMediaSession();
