@@ -1198,6 +1198,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
                     context.push('/player/equalizer');
                   },
                   onMoreOptions: _showMoreOptions,
+                  onTogether: () => unawaited(_showTogetherEntry()),
                   onToggleMute: _toggleMute,
                   onLock: _lockControls,
                   onRotate: _toggleOrientation,
