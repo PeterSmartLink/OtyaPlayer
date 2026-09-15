@@ -39,12 +39,13 @@ void main() {
     expect(source, contains('_hydrateStartupPrivacyAndOnboarding()'));
   });
 
-  test('media-session playback does not request ordinary notification consent', () {
+  test('media-session playback requests notification access only from user-initiated playback', () {
     final source = File(
       'lib/core/services/media_notification_service.dart',
     ).readAsStringSync();
 
-    expect(source, isNot(contains('NotificationService.instance.requestPermission')));
+    expect(source, contains('NotificationService.instance.requestPermissionOnce()'));
+    expect(source, contains('This runs only after the person starts playback'));
     expect(source, isNot(contains('existsSync()')));
   });
 
