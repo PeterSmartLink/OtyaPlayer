@@ -7,11 +7,9 @@ class _VideoHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 8, 6),
+        padding: const EdgeInsets.fromLTRB(20, 18, 8, 8),
         child: Row(
           children: [
-            const OtyaMark(size: 38),
-            const SizedBox(width: 11),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -19,8 +17,8 @@ class _VideoHeader extends StatelessWidget {
                   const Text(
                     'Video',
                     style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
                       letterSpacing: -.5,
                     ),
                   ),
@@ -35,7 +33,7 @@ class _VideoHeader extends StatelessWidget {
               ),
             ),
             IconButton(
-              tooltip: 'Search OTYA',
+              tooltip: 'Search your library',
               onPressed: () {
                 HapticFeedback.selectionClick();
                 SmartSearchSheet.show(context);

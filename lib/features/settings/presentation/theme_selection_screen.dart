@@ -21,6 +21,8 @@ class _ThemeSelectionScreenState extends State<ThemeSelectionScreen> {
   String? _wallpaperPath;
   bool _saving = false;
   bool _loadingCatalog = true;
+  bool _refreshingCatalog = false;
+  int _catalogRequest = 0;
   String? _catalogError;
   List<OnlineTheme> _themes = const [];
 
@@ -31,21 +33,43 @@ class _ThemeSelectionScreenState extends State<ThemeSelectionScreen> {
     _loadCatalog();
   }
 
-  Future<void> _loadCatalog() async {
+  Future<void> _loadCatalog({bool forceRefresh = false}) async {
+    // The first load starts with its spinner already visible. Later calls are
+    // coalesced so a slow earlier response cannot replace a newer refresh.
+    if (_refreshingCatalog || (_loadingCatalog && _themes.isNotEmpty)) return;
+    final request = ++_catalogRequest;
+    final isInitialLoad = _themes.isEmpty;
+    setState(() {
+      _loadingCatalog = isInitialLoad;
+      _refreshingCatalog = !isInitialLoad;
+      _catalogError = null;
+    });
+
     try {
-      final themes = await OnlineThemeService.fetchCatalog();
-      if (!mounted) return;
+      final themes = await OnlineThemeService.fetchCatalog(
+        forceRefresh: forceRefresh,
+      );
+      if (!mounted || request != _catalogRequest) return;
       setState(() {
         _themes = themes;
         _loadingCatalog = false;
+        _refreshingCatalog = false;
         _catalogError = null;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || request != _catalogRequest) return;
       setState(() {
         _loadingCatalog = false;
-        _catalogError = 'Story themes are unavailable right now';
+        _refreshingCatalog = false;
+        if (_themes.isEmpty) {
+          _catalogError = 'Backgrounds are unavailable right now';
+        }
       });
+      if (_themes.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not refresh backgrounds')),
+        );
+      }
     }
   }
 
@@ -124,7 +148,7 @@ class _ThemeSelectionScreenState extends State<ThemeSelectionScreen> {
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
         children: [
           const Text(
-            'YOUR BACKGROUND',
+            'BACKGROUND',
             style: TextStyle(
               fontSize: 11,
               letterSpacing: 1.4,
@@ -144,7 +168,7 @@ class _ThemeSelectionScreenState extends State<ThemeSelectionScreen> {
             children: [
               const Expanded(
                 child: Text(
-                  'OTYA STORIES',
+                  'CURATED BACKGROUNDS',
                   style: TextStyle(
                     fontSize: 11,
                     letterSpacing: 1.4,
@@ -154,9 +178,16 @@ class _ThemeSelectionScreenState extends State<ThemeSelectionScreen> {
                 ),
               ),
               TextButton.icon(
-                onPressed: _loadingCatalog ? null : _loadCatalog,
-                icon: const Icon(Icons.refresh_rounded, size: 16),
-                label: const Text('Refresh'),
+                onPressed: (_loadingCatalog || _refreshingCatalog)
+                    ? null
+                    : () => _loadCatalog(forceRefresh: true),
+                icon: _refreshingCatalog
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh_rounded, size: 16),
+                label: Text(_refreshingCatalog ? 'Refreshing' : 'Refresh'),
               ),
             ],
           ),
@@ -172,7 +203,10 @@ class _ThemeSelectionScreenState extends State<ThemeSelectionScreen> {
               child: Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
             )
           else if (_catalogError != null)
-            _CatalogError(message: _catalogError!, onRetry: _loadCatalog)
+            _CatalogError(
+              message: _catalogError!,
+              onRetry: () => _loadCatalog(forceRefresh: true),
+            )
           else
             GridView.builder(
               shrinkWrap: true,
@@ -208,7 +242,7 @@ class _ThemeSelectionScreenState extends State<ThemeSelectionScreen> {
                 SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Story themes are downloaded as tiny visual recipes. After installation they render on-device and work offline. Your own photo never leaves your phone.',
+                    'Backgrounds are saved on your device for offline use. Your photo stays on your phone.',
                     style: TextStyle(
                       fontSize: 10,
                       height: 1.45,
@@ -291,7 +325,7 @@ class _PhotoThemeCard extends StatelessWidget {
                       ),
                     const SizedBox(height: 10),
                     Text(
-                      path == null ? 'Choose Your Photo' : 'Change Your Photo',
+                      path == null ? 'Choose a photo' : 'Change photo',
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
@@ -323,8 +357,8 @@ class _DefaultThemeCard extends StatelessWidget {
         side: BorderSide(color: active ? AppColors.accent : AppColors.border),
       ),
       leading: const Icon(Icons.landscape_rounded, color: AppColors.accent),
-      title: const Text('OTYA Mountains', style: TextStyle(fontWeight: FontWeight.w700)),
-      subtitle: const Text('The built-in mountain and lake story'),
+      title: const Text('Default', style: TextStyle(fontWeight: FontWeight.w700)),
+      subtitle: const Text('A calm, low-distraction Otya canvas'),
       trailing: active
           ? const Icon(Icons.check_circle_rounded, color: AppColors.accent)
           : const Icon(Icons.chevron_right_rounded),

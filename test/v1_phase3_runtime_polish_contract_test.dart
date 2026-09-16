@@ -18,19 +18,19 @@ void main() {
     expect(main, isNot(contains('AppSettings.load()')));
   });
 
-  test('Me keeps only Send Files and Private as primary shortcuts', () {
+  test('Me keeps Transfer, Files and Private in one focused device group', () {
     final source = File(
       'lib/features/my_space/presentation/my_space_hub_screen.dart',
     ).readAsStringSync();
 
-    final quickStart = source.indexOf("_SectionLabel('Quick actions')");
+    final quickStart = source.indexOf("_SectionLabel('On this device')");
     final secondaryStart =
-        source.indexOf("_SectionLabel('Library & activity')", quickStart);
+        source.indexOf("_SectionLabel('Library')", quickStart);
     expect(quickStart, greaterThanOrEqualTo(0));
     expect(secondaryStart, greaterThan(quickStart));
 
     final quick = source.substring(quickStart, secondaryStart);
-    expect(quick, contains("title: 'Send'"));
+    expect(quick, contains("title: 'Transfer'"));
     expect(quick, contains("title: 'Files'"));
     expect(quick, contains("title: 'Private'"));
     expect(quick, isNot(contains("title: 'Tools'")));

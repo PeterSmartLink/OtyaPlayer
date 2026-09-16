@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../core/models/media_item.dart';
 import '../../../shared/widgets/album_art_thumb.dart';
-import '../../../shared/widgets/otya_logo.dart';
 import '../../../shared/widgets/permission_denied_screen.dart';
 import '../../../shared/widgets/wallpaper_scaffold.dart';
 import '../../my_space/presentation/providers/my_space_provider.dart';
@@ -223,22 +222,20 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 10, 8),
+        padding: const EdgeInsets.fromLTRB(20, 18, 10, 10),
         child: Row(
           children: [
-            const OtyaMark(size: 38),
-            const SizedBox(width: 11),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Music', style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900, letterSpacing: -.5)),
+                  const Text('Music', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -.7)),
                   Text('$songCount local song${songCount == 1 ? '' : 's'}', style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary)),
                 ],
               ),
             ),
             IconButton(
-              tooltip: 'Search Otya',
+              tooltip: 'Search your library',
               onPressed: () {
                 HapticFeedback.selectionClick();
                 SmartSearchSheet.show(context);

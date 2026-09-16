@@ -3,13 +3,13 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('Me stays media-first and exposes Send without consumer AI', () {
+  test('Me stays media-first and keeps focused local actions without consumer AI', () {
     final source = File(
       'lib/features/my_space/presentation/my_space_hub_screen.dart',
     ).readAsStringSync();
 
-    expect(source, contains("title: 'Send'"));
-    expect(source, contains("subtitle: 'Nearby sharing'"));
+    expect(source, contains("title: 'Transfer'"));
+    expect(source, contains("subtitle: 'Nearby, direct sharing'"));
     expect(source, contains("onTap: () => context.push('/transfer')"));
     expect(source, isNot(contains('_NextCard')));
     expect(source, isNot(contains('OtyaAiMark')));

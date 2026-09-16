@@ -53,16 +53,16 @@ void main() {
     expect(source, contains("'NOW PLAYING'"));
   });
 
-  test('default background follows current Otya cyan blue identity', () {
+  test('default background stays quiet and leaves visual richness to media', () {
     final background = File(
       'lib/shared/widgets/otya_mountain_background.dart',
     ).readAsStringSync();
     final colors = File('lib/app/theme/app_colors.dart').readAsStringSync();
 
-    expect(background, contains('_OtyaLightFlowPainter'));
-    expect(background, contains('AppColors.brandCyan'));
-    expect(background, isNot(contains('_MountainLakePainter')));
-    expect(colors, contains('brandCyan = Color(0xFF27E8FF)'));
-    expect(colors, contains('brandBlue = Color(0xFF126BFF)'));
+    expect(background, contains('this.showGlow = false'));
+    expect(background, isNot(contains('_OtyaLightFlowPainter')));
+    expect(background, contains('const ColoredBox(color: AppColors.background)'));
+    expect(colors, contains('brandViolet = Color(0xFF8B6CFF)'));
+    expect(colors, contains('brandBlue = brandViolet'));
   });
 }

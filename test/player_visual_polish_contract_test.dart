@@ -27,21 +27,20 @@ void main() {
     expect(source, contains('const SizedBox(height: 8)'));
   });
 
-  test('dark theme is luminous Otya navy rather than flat near-black', () {
+  test('dark theme is a quiet mature product canvas', () {
     final colors = File('lib/app/theme/app_colors.dart').readAsStringSync();
     final background = File(
       'lib/shared/widgets/otya_mountain_background.dart',
     ).readAsStringSync();
     final theme = File('lib/app/theme/app_theme.dart').readAsStringSync();
 
-    expect(colors, contains('background = Color(0xFF07152D)'));
-    expect(colors, contains('surface = Color(0xFF0B1E3A)'));
-    expect(colors, contains('brandCyan = Color(0xFF27E8FF)'));
-    expect(colors, contains('brandBlue = Color(0xFF126BFF)'));
-    expect(colors, isNot(contains('background = Color(0xFF050812)')));
-
-    expect(background, contains('this.darkness = 0.16'));
-    expect(background, contains('strokeWidth = shortest * .24'));
+    expect(colors, contains('background = Color(0xFF101014)'));
+    expect(colors, contains('surface = Color(0xFF18181E)'));
+    expect(colors, contains('brandViolet = Color(0xFF8B6CFF)'));
+    expect(colors, contains('brandBlue = brandViolet'));
+        expect(background, contains('this.darkness = 0.16'));
+    expect(background, contains('this.showGlow = false'));
+    expect(background, isNot(contains('_OtyaLightFlowPainter')));
     expect(theme, contains('final background = isDark ? AppColors.background'));
     expect(theme, isNot(contains('Color(0xFF070A10)')));
   });

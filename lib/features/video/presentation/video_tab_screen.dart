@@ -9,7 +9,6 @@ import '../../../app/theme/app_colors.dart';
 import '../../../core/database/otya_database.dart';
 import '../../../core/models/media_item.dart';
 import '../../../shared/widgets/media_new_indicator.dart';
-import '../../../shared/widgets/otya_logo.dart';
 import '../../../shared/widgets/permission_denied_screen.dart';
 import '../../../shared/widgets/wallpaper_scaffold.dart';
 import '../../my_space/presentation/providers/my_space_provider.dart';

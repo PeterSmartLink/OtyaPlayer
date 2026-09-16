@@ -32,16 +32,16 @@ void main() {
     expect(mainSource, isNot(contains("androidNotificationChannelName: 'OTYA")));
   });
 
-  test('Otya uses the approved current mark and cyan-blue palette', () {
+  test('Otya uses the approved current mark and restrained violet palette', () {
     final colors = File('lib/app/theme/app_colors.dart').readAsStringSync();
     final logo = File('lib/shared/widgets/otya_logo_v2.dart').readAsStringSync();
     final brandNote = File(
       'assets/branding/README-current-mark.md',
     ).readAsStringSync();
 
-    expect(colors, contains('Color(0xFF27E8FF)'));
-    expect(colors, contains('Color(0xFF126BFF)'));
-    expect(colors, contains('Color(0xFF173BFF)'));
+    expect(colors, contains('Color(0xFF8B6CFF)'));
+    expect(colors, contains('Color(0xFF6547DB)'));
+    expect(colors, contains('Color(0xFF101014)'));
     expect(logo, contains('assets/branding/otya_app_icon.webp'));
     expect(logo, isNot(contains('assets/branding/otya_mark_current.png')));
     expect(logo, contains("'Otya'"));
