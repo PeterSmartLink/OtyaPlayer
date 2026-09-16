@@ -14,13 +14,13 @@ void main() {
     expect(router, isNot(contains("label: 'Together'")));
   });
 
-  test('Me exposes every required Otya v1 hub action without consumer AI', () {
+  test('Me keeps every required Otya v1 action reachable without consumer AI', () {
     final source = File(
       'lib/features/my_space/presentation/my_space_hub_screen.dart',
     ).readAsStringSync();
 
     for (final label in [
-      'Send',
+      'Transfer',
       'Files',
       'Private',
       'Convert video to audio',
