@@ -28,7 +28,7 @@ jobs:
           fetch-depth: 0
           ref: refs/heads/main
 
-      - name: Prove current main and first-release identity
+      - name: Prove current main and release identity
         shell: bash
         run: |
           set -euo pipefail
@@ -38,8 +38,8 @@ jobs:
             exit 1
           }
           APP_VERSION="$(awk '/^version:[[:space:]]*/ { print $2; exit }' pubspec.yaml)"
-          [[ "$APP_VERSION" =~ ^1\.0\.0\+[1-9][0-9]*$ ]] || {
-            echo "ERROR: Otya first-release Play builds must stay 1.0.0+<positive build>; found $APP_VERSION"
+          [[ "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\+[1-9][0-9]*$ ]] || {
+            echo "ERROR: Otya Play builds must use <version>+<positive build>; found $APP_VERSION"
             exit 1
           }
 
