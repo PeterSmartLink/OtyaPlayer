@@ -12,6 +12,7 @@ void main() {
     expect(source, isNot(contains('8 + bottomInset')));
     expect(source, contains('EdgeInsets.fromLTRB(10, 0, 10, 3)'));
     expect(source, contains('height: 64'));
+    expect(source, isNot(contains('AppColors.brandCyan')));
   });
 
   test('full Now Playing does not reserve the phone bottom inset twice', () {

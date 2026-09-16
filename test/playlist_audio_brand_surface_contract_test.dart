@@ -50,7 +50,8 @@ void main() {
     }
 
     expect(source, contains('AppColors.accentGradientDiag'));
-    expect(source, contains("'NOW PLAYING'"));
+    expect(source, contains("'Now playing'"));
+    expect(source, isNot(contains('AppColors.brandCyan')));
   });
 
   test('default background stays quiet and leaves visual richness to media', () {
