@@ -124,7 +124,7 @@ class _ThemeSelectionScreenState extends State<ThemeSelectionScreen> {
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
         children: [
           const Text(
-            'YOUR BACKGROUND',
+            'BACKGROUND',
             style: TextStyle(
               fontSize: 11,
               letterSpacing: 1.4,
@@ -144,7 +144,7 @@ class _ThemeSelectionScreenState extends State<ThemeSelectionScreen> {
             children: [
               const Expanded(
                 child: Text(
-                  'OTYA STORIES',
+                  'CURATED BACKGROUNDS',
                   style: TextStyle(
                     fontSize: 11,
                     letterSpacing: 1.4,
@@ -208,7 +208,7 @@ class _ThemeSelectionScreenState extends State<ThemeSelectionScreen> {
                 SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Story themes are downloaded as tiny visual recipes. After installation they render on-device and work offline. Your own photo never leaves your phone.',
+                    'Backgrounds are saved on your device for offline use. Your photo stays on your phone.',
                     style: TextStyle(
                       fontSize: 10,
                       height: 1.45,
@@ -291,7 +291,7 @@ class _PhotoThemeCard extends StatelessWidget {
                       ),
                     const SizedBox(height: 10),
                     Text(
-                      path == null ? 'Choose Your Photo' : 'Change Your Photo',
+                      path == null ? 'Choose a photo' : 'Change photo',
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
@@ -323,8 +323,8 @@ class _DefaultThemeCard extends StatelessWidget {
         side: BorderSide(color: active ? AppColors.accent : AppColors.border),
       ),
       leading: const Icon(Icons.landscape_rounded, color: AppColors.accent),
-      title: const Text('OTYA Mountains', style: TextStyle(fontWeight: FontWeight.w700)),
-      subtitle: const Text('The built-in mountain and lake story'),
+      title: const Text('Default', style: TextStyle(fontWeight: FontWeight.w700)),
+      subtitle: const Text('A calm, low-distraction Otya canvas'),
       trailing: active
           ? const Icon(Icons.check_circle_rounded, color: AppColors.accent)
           : const Icon(Icons.chevron_right_rounded),
