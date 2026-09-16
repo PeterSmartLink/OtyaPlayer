@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('public app version remains 1.0.0 with a positive internal build', () {
+  test('release candidate uses the shared 1.1 version family', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
     final match =
         RegExp(r'^version:\s*(\S+)\s*$', multiLine: true).firstMatch(pubspec);
@@ -36,14 +36,14 @@ void main() {
     expect(workflow, isNot(contains(r'keytool -printcert -jarfile "$APK"')));
   });
 
-  test('production releases keep 1.0.0 but use immutable build-specific tags', () {
+  test('production releases use immutable semantic-version build tags', () {
     final directRelease =
         File('.github/workflows/release-apk.yml').readAsStringSync();
     final release = File('.github/workflows/release.yml').readAsStringSync();
 
-    expect(directRelease, contains('Verify v1.0.0 release identity'));
+    expect(directRelease, contains('Verify semantic release identity'));
     expect(directRelease, contains(r'^1\.0\.0\+[1-9][0-9]*$'));
-    expect(release, contains("- 'v1.0.0+*'"));
+    expect(release, contains("- 'v*'"));
     expect(release, contains(r'^v1\.0\.0\+[1-9][0-9]*$'));
     expect(release, contains(r'^1\.0\.0\+[1-9][0-9]*$'));
     expect(release, contains('APP_VERSION='));
