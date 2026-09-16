@@ -142,34 +142,19 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer>
             opacity: (1 - _dragOffset / (_dismissThreshold * 1.5))
                 .clamp(0.0, 1.0),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(16),
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        AppColors.surfaceElevated.withValues(alpha: .96),
-                        AppColors.surface.withValues(alpha: .92),
-                        AppColors.brandDeepBlue.withValues(alpha: .17),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: AppColors.brandCyan.withValues(alpha: .20),
-                    ),
+                    color: AppColors.surfaceElevated.withValues(alpha: .96),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.borderSubtle),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.brandBlue.withValues(alpha: .18),
-                        blurRadius: 24,
+                        color: Colors.black.withValues(alpha: .22),
+                        blurRadius: 18,
                         spreadRadius: -8,
-                        offset: const Offset(0, 8),
-                      ),
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: .18),
-                        blurRadius: 16,
                         offset: const Offset(0, 7),
                       ),
                     ],
@@ -282,8 +267,9 @@ class _PlayPauseButton extends ConsumerWidget {
             ),
             boxShadow: [
               BoxShadow(
-                color: AppColors.brandCyan.withValues(alpha: .22),
+                color: AppColors.brandViolet.withValues(alpha: .22),
                 blurRadius: 14,
+                spreadRadius: -3,
               ),
             ],
           ),
@@ -370,7 +356,7 @@ class _MiniSeekBarState extends ConsumerState<_MiniSeekBar> {
                   minHeight: _isDragging ? 4 : 3,
                   backgroundColor: Colors.white.withValues(alpha: .10),
                   valueColor: const AlwaysStoppedAnimation<Color>(
-                    AppColors.brandCyan,
+                    AppColors.accent,
                   ),
                 ),
               ),
