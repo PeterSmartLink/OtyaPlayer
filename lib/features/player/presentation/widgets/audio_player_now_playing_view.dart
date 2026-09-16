@@ -81,30 +81,14 @@ class _AudioPlayerNowPlayingView extends StatelessWidget {
                     onPressed: onBack,
                   ),
                   const Spacer(),
-                  const Column(
-                    children: [
-                      Text(
-                        'OTYA',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.brandCyan,
-                          letterSpacing: 2.0,
-                          fontFamily: 'Inter',
-                        ),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        'NOW PLAYING',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary,
-                          letterSpacing: 1.35,
-                          fontFamily: 'Inter',
-                        ),
-                      ),
-                    ],
+                  const Text(
+                    'Now playing',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                      letterSpacing: -.15,
+                    ),
                   ),
                   const Spacer(),
                   SleepTimerButton(onExpire: onSleepExpire),
@@ -132,15 +116,10 @@ class _AudioPlayerNowPlayingView extends StatelessWidget {
                     borderRadius: BorderRadius.circular(30),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.brandBlue.withValues(alpha: .25),
-                        blurRadius: 30,
-                        spreadRadius: 2,
+                        color: Colors.black.withValues(alpha: .24),
+                        blurRadius: 24,
+                        spreadRadius: -5,
                         offset: const Offset(0, 12),
-                      ),
-                      BoxShadow(
-                        color: AppColors.brandCyan.withValues(alpha: .12),
-                        blurRadius: 20,
-                        spreadRadius: 1,
                       ),
                     ],
                   ),
@@ -162,26 +141,9 @@ class _AudioPlayerNowPlayingView extends StatelessWidget {
               margin: const EdgeInsets.symmetric(horizontal: 16),
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 11),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppColors.surfaceElevated.withValues(alpha: .96),
-                    AppColors.surface.withValues(alpha: .90),
-                    AppColors.brandDeepBlue.withValues(alpha: .12),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: AppColors.brandCyan.withValues(alpha: .18),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.brandBlue.withValues(alpha: .10),
-                    blurRadius: 20,
-                    spreadRadius: -7,
-                  ),
-                ],
+                color: AppColors.surfaceElevated.withValues(alpha: .96),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.borderSubtle),
               ),
               child: Column(
                 children: [
@@ -266,17 +228,15 @@ class _AudioPlayerNowPlayingView extends StatelessWidget {
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: AppColors.surfaceElevated.withValues(alpha: .90),
-                        borderRadius: BorderRadius.circular(13),
-                        border: Border.all(
-                          color: AppColors.brandCyan.withValues(alpha: .16),
-                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.borderSubtle),
                       ),
                       child: Text(
                         speedLabel,
                         style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w800,
-                          color: AppColors.brandCyan,
+                          color: AppColors.accent,
                           fontFamily: 'Inter',
                         ),
                       ),
@@ -334,14 +294,10 @@ class _AudioPlayerNowPlayingView extends StatelessWidget {
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.brandBlue.withValues(alpha: .34),
-                            blurRadius: 24,
-                            spreadRadius: 1,
+                            color: AppColors.brandViolet.withValues(alpha: .26),
+                            blurRadius: 20,
+                            spreadRadius: -2,
                             offset: const Offset(0, 8),
-                          ),
-                          BoxShadow(
-                            color: AppColors.brandCyan.withValues(alpha: .18),
-                            blurRadius: 14,
                           ),
                         ],
                       ),
