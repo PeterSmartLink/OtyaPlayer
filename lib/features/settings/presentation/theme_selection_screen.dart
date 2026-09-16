@@ -34,7 +34,9 @@ class _ThemeSelectionScreenState extends State<ThemeSelectionScreen> {
   }
 
   Future<void> _loadCatalog({bool forceRefresh = false}) async {
-    if (_loadingCatalog || _refreshingCatalog) return;
+    // The first load starts with its spinner already visible. Later calls are
+    // coalesced so a slow earlier response cannot replace a newer refresh.
+    if (_refreshingCatalog || (_loadingCatalog && _themes.isNotEmpty)) return;
     final request = ++_catalogRequest;
     final isInitialLoad = _themes.isEmpty;
     setState(() {
