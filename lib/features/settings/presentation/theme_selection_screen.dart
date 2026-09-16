@@ -21,6 +21,8 @@ class _ThemeSelectionScreenState extends State<ThemeSelectionScreen> {
   String? _wallpaperPath;
   bool _saving = false;
   bool _loadingCatalog = true;
+  bool _refreshingCatalog = false;
+  int _catalogRequest = 0;
   String? _catalogError;
   List<OnlineTheme> _themes = const [];
 
@@ -31,21 +33,41 @@ class _ThemeSelectionScreenState extends State<ThemeSelectionScreen> {
     _loadCatalog();
   }
 
-  Future<void> _loadCatalog() async {
+  Future<void> _loadCatalog({bool forceRefresh = false}) async {
+    if (_loadingCatalog || _refreshingCatalog) return;
+    final request = ++_catalogRequest;
+    final isInitialLoad = _themes.isEmpty;
+    setState(() {
+      _loadingCatalog = isInitialLoad;
+      _refreshingCatalog = !isInitialLoad;
+      _catalogError = null;
+    });
+
     try {
-      final themes = await OnlineThemeService.fetchCatalog();
-      if (!mounted) return;
+      final themes = await OnlineThemeService.fetchCatalog(
+        forceRefresh: forceRefresh,
+      );
+      if (!mounted || request != _catalogRequest) return;
       setState(() {
         _themes = themes;
         _loadingCatalog = false;
+        _refreshingCatalog = false;
         _catalogError = null;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || request != _catalogRequest) return;
       setState(() {
         _loadingCatalog = false;
-        _catalogError = 'Story themes are unavailable right now';
+        _refreshingCatalog = false;
+        if (_themes.isEmpty) {
+          _catalogError = 'Story themes are unavailable right now';
+        }
       });
+      if (_themes.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not refresh story themes')),
+        );
+      }
     }
   }
 
@@ -154,9 +176,16 @@ class _ThemeSelectionScreenState extends State<ThemeSelectionScreen> {
                 ),
               ),
               TextButton.icon(
-                onPressed: _loadingCatalog ? null : _loadCatalog,
-                icon: const Icon(Icons.refresh_rounded, size: 16),
-                label: const Text('Refresh'),
+                onPressed: (_loadingCatalog || _refreshingCatalog)
+                    ? null
+                    : () => _loadCatalog(forceRefresh: true),
+                icon: _refreshingCatalog
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh_rounded, size: 16),
+                label: Text(_refreshingCatalog ? 'Refreshing' : 'Refresh'),
               ),
             ],
           ),
@@ -172,7 +201,10 @@ class _ThemeSelectionScreenState extends State<ThemeSelectionScreen> {
               child: Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
             )
           else if (_catalogError != null)
-            _CatalogError(message: _catalogError!, onRetry: _loadCatalog)
+            _CatalogError(
+              message: _catalogError!,
+              onRetry: () => _loadCatalog(forceRefresh: true),
+            )
           else
             GridView.builder(
               shrinkWrap: true,
