@@ -203,10 +203,10 @@ Future<void> _initPlaybackPlatformOnce() async {
     config: AudioServiceConfig(
       androidNotificationChannelId: 'com.otyaplayer.app.audio',
       androidNotificationChannelName: 'Otya — Now Playing',
-      // Keep the media foreground service alive while paused so Android does
-      // not need to recreate it when playback resumes. The notification remains
-      // dismissible; deleting it intentionally invokes the handler's stop path.
-      androidNotificationOngoing: false,
+      // Music must retain Android foreground-service protection after Otya
+      // leaves the screen. A dismissible media notification can remove that
+      // protection on OEM builds and stop playback minutes later.
+      androidNotificationOngoing: true,
       androidStopForegroundOnPause: false,
       androidNotificationIcon: 'drawable/ic_notification',
       notificationColor: AppColors.brandBlue,

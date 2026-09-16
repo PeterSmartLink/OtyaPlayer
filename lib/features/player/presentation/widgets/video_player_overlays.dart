@@ -19,6 +19,7 @@ class VideoPlayerControlsOverlay extends StatelessWidget {
   final VoidCallback onAudioTracks;
   final VoidCallback onEqualizer;
   final VoidCallback onMoreOptions;
+  final VoidCallback onTogether;
   final VoidCallback onToggleMute;
   final VoidCallback onLock;
   final VoidCallback onRotate;
@@ -49,6 +50,7 @@ class VideoPlayerControlsOverlay extends StatelessWidget {
     required this.onAudioTracks,
     required this.onEqualizer,
     required this.onMoreOptions,
+    required this.onTogether,
     required this.onToggleMute,
     required this.onLock,
     required this.onRotate,
@@ -419,6 +421,26 @@ class VideoPlayerControlsOverlay extends StatelessWidget {
                               fontFamily: 'Inter',
                             ),
                           ),
+                        ),
+                        const SizedBox(width: 8),
+                        TextButton.icon(
+                          onPressed: () {
+                            HapticFeedback.selectionClick();
+                            onTogether();
+                          },
+                          style: TextButton.styleFrom(
+                            minimumSize: const Size(0, 44),
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            side: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.12),
+                            ),
+                            backgroundColor: Colors.black.withValues(alpha: 0.24),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          icon: const Icon(Icons.group_outlined, size: 18),
+                          label: const Text('Together'),
                         ),
                         const Spacer(),
                         IconButton(

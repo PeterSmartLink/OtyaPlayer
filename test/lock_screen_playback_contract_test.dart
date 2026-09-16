@@ -59,7 +59,7 @@ void main() {
     final main = File('lib/main.dart').readAsStringSync();
 
     expect(main, contains('androidStopForegroundOnPause: false'));
-    expect(main, contains('androidNotificationOngoing: false'));
+    expect(main, contains('androidNotificationOngoing: true'));
     expect(main, contains('preloadArtwork: false'));
   });
 

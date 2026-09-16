@@ -7,14 +7,15 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import 'album_art_service.dart';
+import 'notification_service.dart';
 import 'audio_handler.dart';
 
 /// Owns system Now Playing metadata for notification shade, lock screen,
 /// Bluetooth/headset controls and Android media surfaces.
 ///
-/// Android media-session notifications are separate from ordinary Otya
-/// notification consent. More importantly, Now Playing must be able to recover
-/// if Android's foreground media service was not ready during app bootstrap.
+/// Android media sessions publish Now Playing independently, but Android 13+
+/// notification consent is requested from the first user-initiated playback so
+/// the notification shade and lock screen can show the session reliably.
 class MediaNotificationService {
   MediaNotificationService._();
   static final MediaNotificationService instance = MediaNotificationService._();
@@ -261,6 +262,10 @@ class MediaNotificationService {
     required bool isPlaying,
     String? albumArtPath,
   }) async {
+    // This runs only after the person starts playback. Asking here, instead of
+    // behind startup dialogs, lets Android show the real Now Playing surface
+    // and lock-screen controls on Android 13+ without interrupting onboarding.
+    unawaited(NotificationService.instance.requestPermissionOnce());
     final generation = ++_metadataGeneration;
     if (!_initialized) await init();
     await _ensureMediaSession();
@@ -299,6 +304,7 @@ class MediaNotificationService {
     required bool isPlaying,
     required Uint8List albumArtBytes,
   }) async {
+    unawaited(NotificationService.instance.requestPermissionOnce());
     final generation = ++_metadataGeneration;
     if (!_initialized) await init();
     await _ensureMediaSession();

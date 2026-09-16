@@ -13,6 +13,13 @@ void main() {
     expect(video.contains('AudioSessionService.instance.activate()'), isTrue);
   });
 
+  test('Together is a visible video-player action, not a hidden destination', () {
+    final overlay = File('lib/features/player/presentation/widgets/video_player_overlays.dart').readAsStringSync();
+    expect(overlay.contains('final VoidCallback onTogether'), isTrue);
+    expect(overlay.contains("label: const Text('Together')"), isTrue);
+    expect(video.contains('onTogether: () => unawaited(_showTogetherEntry())'), isTrue);
+  });
+
   test('video transport callbacks restore the previous media owner', () {
     expect(notifications.contains('registerTransportCallbacks('), isTrue);
     expect(notifications.contains('unregisterTransportCallbacks(Object owner)'), isTrue);
