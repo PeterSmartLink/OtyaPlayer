@@ -35,45 +35,35 @@ class MySpaceHubScreen extends ConsumerWidget {
                 onProfile: () => context.push('/profile'),
               ),
             ),
-            const SliverToBoxAdapter(child: _SectionLabel('Quick actions')),
+            const SliverToBoxAdapter(child: _SectionLabel('On this device')),
             SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 0, 14, 20),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _PrimaryAction(
-                        icon: Icons.send_rounded,
-                        title: 'Send',
-                        subtitle: 'Nearby sharing',
-                        enabled: remote.featureEnabled('transfer', fallback: true),
-                        onTap: () => context.push('/transfer'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _PrimaryAction(
-                        icon: Icons.folder_open_rounded,
-                        title: 'Files',
-                        subtitle: 'Browse folders',
-                        onTap: () => context.push('/tools/folders'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _PrimaryAction(
-                        icon: Icons.lock_outline_rounded,
-                        title: 'Private',
-                        subtitle: 'Protected media',
-                        enabled: remote.featureEnabled('private', fallback: true),
-                        onTap: () => context.push('/vault'),
-                      ),
-                    ),
-                  ],
-                ),
+              child: _RowGroup(
+                children: [
+                  _PrimaryAction(
+                    icon: Icons.send_rounded,
+                    title: 'Transfer',
+                    subtitle: 'Nearby, direct sharing',
+                    enabled: remote.featureEnabled('transfer', fallback: true),
+                    onTap: () => context.push('/transfer'),
+                  ),
+                  _PrimaryAction(
+                    icon: Icons.folder_open_rounded,
+                    title: 'Files',
+                    subtitle: 'Browse folders and media',
+                    onTap: () => context.push('/tools/folders'),
+                  ),
+                  _PrimaryAction(
+                    icon: Icons.lock_outline_rounded,
+                    title: 'Private',
+                    subtitle: 'Protected media on this device',
+                    enabled: remote.featureEnabled('private', fallback: true),
+                    onTap: () => context.push('/vault'),
+                  ),
+                ],
               ),
             ),
-            const SliverToBoxAdapter(child: _SectionLabel('Library & activity')),
+            const SliverToBoxAdapter(child: SizedBox(height: 20)),
+            const SliverToBoxAdapter(child: _SectionLabel('Library')),
             SliverToBoxAdapter(
               child: _RowGroup(
                 children: [
@@ -93,7 +83,7 @@ class MySpaceHubScreen extends ConsumerWidget {
               ),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 20)),
-            const SliverToBoxAdapter(child: _SectionLabel('Tools & settings')),
+            const SliverToBoxAdapter(child: _SectionLabel('Preferences')),
             SliverToBoxAdapter(
               child: _RowGroup(
                 children: [
@@ -125,13 +115,13 @@ class MySpaceHubScreen extends ConsumerWidget {
               ),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 20)),
-            const SliverToBoxAdapter(child: _SectionLabel('Account')),
+            const SliverToBoxAdapter(child: _SectionLabel('Account & support')),
             SliverToBoxAdapter(
               child: _RowGroup(
                 children: [
                   _ActionRow(
                     icon: Icons.account_circle_outlined,
-                    title: 'OTYA Account',
+                    title: 'Account',
                     subtitle: 'Profile, sign-in, security and backup',
                     onTap: () => context.push('/profile'),
                   ),
@@ -139,13 +129,13 @@ class MySpaceHubScreen extends ConsumerWidget {
               ),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 20)),
-            const SliverToBoxAdapter(child: _SectionLabel('Product')),
+            const SliverToBoxAdapter(child: _SectionLabel('About')),
             SliverToBoxAdapter(
               child: _RowGroup(
                 children: [
                   _ActionRow(
                     icon: Icons.info_outline_rounded,
-                    title: 'About OTYA',
+                    title: 'About Otya',
                     subtitle: 'Version, privacy, terms and product information',
                     onTap: () => context.push('/about'),
                   ),
@@ -446,7 +436,7 @@ class _MeHeader extends StatelessWidget {
                 ),
                 const SizedBox(height: 7),
                 Text(
-                  name?.isNotEmpty == true ? 'Good to see you, $name' : 'Your media, tools and OTYA account',
+                  name?.isNotEmpty == true ? 'Good to see you, $name' : 'Your media and device',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
@@ -492,45 +482,28 @@ class _PrimaryAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Opacity(
         opacity: enabled ? 1 : .45,
-        child: Material(
-          color: AppColors.cardOf(context).withValues(alpha: .9),
-          borderRadius: BorderRadius.circular(22),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: enabled
-                ? () {
-                    HapticFeedback.selectionClick();
-                    onTap();
-                  }
-                : null,
-            child: Container(
-              constraints: const BoxConstraints(minHeight: 122),
-              padding: const EdgeInsets.fromLTRB(12, 15, 10, 13),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: AppColors.borderOf(context)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: AppColors.accent.withValues(alpha: .1),
-                      borderRadius: BorderRadius.circular(13),
-                    ),
-                    child: Icon(icon, color: AppColors.accent),
-                  ),
-                  const Spacer(),
-                  Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 2),
-                  Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10.5, height: 1.25, color: AppColors.textSecondary)),
-                ],
-              ),
+        child: ListTile(
+          enabled: enabled,
+          onTap: enabled
+              ? () {
+                  HapticFeedback.selectionClick();
+                  onTap();
+                }
+              : null,
+          leading: Container(
+            width: 38,
+            height: 38,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppColors.accent.withValues(alpha: .09),
+              borderRadius: BorderRadius.circular(12),
             ),
+            child: Icon(icon, size: 21, color: AppColors.accent),
           ),
+          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+          subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
         ),
       );
 }
