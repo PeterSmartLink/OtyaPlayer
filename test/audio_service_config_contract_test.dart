@@ -3,18 +3,16 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('audio service notification configuration is assertion-safe', () {
+  test('audio service keeps foreground protection for background music', () {
     final source = File('lib/main.dart').readAsStringSync();
 
     expect(source, contains('androidStopForegroundOnPause: false'));
-    expect(source, contains('androidNotificationOngoing: false'));
+    expect(source, contains('androidNotificationOngoing: true'));
     expect(
       source,
-      isNot(
-        contains(
-          'androidNotificationOngoing: true,\n'
-          '      androidStopForegroundOnPause: false',
-        ),
+      contains(
+        'androidNotificationOngoing: true,\n'
+        '      androidStopForegroundOnPause: false',
       ),
     );
   });
