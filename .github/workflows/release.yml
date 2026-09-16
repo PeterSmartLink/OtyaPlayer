@@ -1,13 +1,13 @@
 # Otya production release pipeline.
-# Public version remains 1.0.0 while each published binary gets an immutable
-# build-specific tag such as v1.0.0+2.
+# Each verified public release uses its exact semantic version and immutable
+# build-specific tag, for example v1.1.0+5.
 
 name: Release
 
 on:
   push:
     tags:
-      - 'v1.0.0+*'
+      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
@@ -28,7 +28,7 @@ env:
 
 jobs:
   build_and_publish:
-    name: Build and publish Otya 1.0.0
+    name: Build and publish Otya release
     runs-on: ubuntu-latest
     timeout-minutes: 65
     environment: production
@@ -46,8 +46,8 @@ jobs:
           else
             TAG='${{ github.ref_name }}'
           fi
-          [[ "$TAG" =~ ^v1\.0\.0\+[1-9][0-9]*$ ]] || {
-            echo "ERROR: Otya release tags must look like v1.0.0+2; refusing $TAG"
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\+[1-9][0-9]*$ ]] || {
+            echo "ERROR: Otya release tags must look like v<version>+<positive-build>; refusing $TAG"
             exit 1
           }
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
@@ -129,8 +129,8 @@ jobs:
             echo "ERROR: tag $RELEASE_TAG does not exactly match pubspec version $APP_VERSION"
             exit 1
           }
-          [[ "$APP_VERSION" =~ ^1\.0\.0\+[1-9][0-9]*$ ]] || {
-            echo "ERROR: expected Otya 1.0.0+<positive build>; found $APP_VERSION"
+          [[ "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\+[1-9][0-9]*$ ]] || {
+            echo "ERROR: expected Otya <version>+<positive build>; found $APP_VERSION"
             exit 1
           }
 

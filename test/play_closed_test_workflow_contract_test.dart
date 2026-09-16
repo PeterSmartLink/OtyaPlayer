@@ -21,7 +21,7 @@ void main() {
     expect(workflow, contains('KEYSTORE_BASE64'));
     expect(workflow, contains('jarsigner -verify'));
     expect(workflow, contains('Play AAB certificate does not match the configured Otya signing key'));
-    expect(workflow, contains(r'^1\.0\.0\+[1-9][0-9]*$'));
+    expect(workflow, contains(r'^[0-9]+\.[0-9]+\.[0-9]+\+[1-9][0-9]*$'));
   });
 
   test('Play closed-test workflow has no public release or Cloudflare side effects', () {

@@ -87,13 +87,13 @@ jobs:
       - name: Flutter tests
         run: flutter test
 
-      - name: Verify v1.0.0 release identity
+      - name: Verify semantic release identity
         shell: bash
         run: |
           set -euo pipefail
           APP_VERSION="$(awk '/^version:[[:space:]]*/ { print $2; exit }' pubspec.yaml)"
-          [[ "$APP_VERSION" =~ ^1\.0\.0\+[1-9][0-9]*$ ]] || {
-            echo "ERROR: first-release evolution must remain 1.0.0+<positive build>; found $APP_VERSION"
+          [[ "$APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\+[1-9][0-9]*$ ]] || {
+            echo "ERROR: release build must use <version>+<positive build>; found $APP_VERSION"
             exit 1
           }
 

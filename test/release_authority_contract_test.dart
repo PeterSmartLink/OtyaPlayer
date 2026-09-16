@@ -15,6 +15,6 @@ void main() {
       source,
       contains(r'immutable tag $RELEASE_TAG does not point to current main'),
     );
-    expect(source, contains("- 'v1.0.0+*'"));
+    expect(source, contains("- 'v*'"));
   });
 }
