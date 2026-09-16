@@ -21,7 +21,26 @@ void main() {
     expect(workflow, contains('KEYSTORE_BASE64'));
     expect(workflow, contains('jarsigner -verify'));
     expect(workflow, contains('Play AAB certificate does not match the configured Otya signing key'));
-    expect(workflow, contains(r'^1\.0\.0\+[1-9][0-9]*$'));
+    expect(workflow, contains(r'^[0-9]+\.[0-9]+\.[0-9]+\+[1-9][0-9]*));
+  });
+
+  test('Play closed-test workflow has no public release or Cloudflare side effects', () {
+    expect(workflow, isNot(contains('publish_r2.sh')));
+    expect(workflow, isNot(contains('softprops/action-gh-release')));
+    expect(workflow, isNot(contains('R2_ACCESS_KEY_ID')));
+    expect(workflow, isNot(contains('CF_API_TOKEN')));
+    expect(workflow, isNot(contains('aws s3')));
+    expect(workflow, isNot(contains('git tag')));
+    expect(workflow, isNot(contains('gh release')));
+  });
+
+  test('Play closed-test artifact is retained only as an Actions build artifact', () {
+    expect(workflow, contains('actions/upload-artifact@v4'));
+    expect(workflow, contains('Otya-Play-closed-test.aab'));
+    expect(workflow, contains('retention-days: 3'));
+  });
+}
+));
   });
 
   test('Play closed-test workflow has no public release or Cloudflare side effects', () {
