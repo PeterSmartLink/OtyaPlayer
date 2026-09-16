@@ -125,12 +125,18 @@ class OnlineThemeService {
 
   static const _catalogUrl = Environment.themesUrl;
 
-  static Future<List<OnlineTheme>> fetchCatalog() async {
+  /// Fetches the server catalog. A manual refresh asks intermediaries for a
+  /// revalidated response; installed themes always remain available offline.
+  static Future<List<OnlineTheme>> fetchCatalog({bool forceRefresh = false}) async {
     try {
       final response = await AppHttpClient.instance.client
           .get(
             Uri.parse(_catalogUrl),
-            headers: const {'Accept': 'application/json'},
+            headers: {
+              'Accept': 'application/json',
+              if (forceRefresh) 'Cache-Control': 'no-cache',
+              if (forceRefresh) 'Pragma': 'no-cache',
+            },
           )
           .timeout(const Duration(seconds: 8));
 
