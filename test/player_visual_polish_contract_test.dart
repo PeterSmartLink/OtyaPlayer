@@ -27,7 +27,7 @@ void main() {
     expect(source, contains('const SizedBox(height: 8)'));
   });
 
-  test('dark theme is luminous Otya navy rather than flat near-black', () {
+  test('dark theme is a quiet mature product canvas', () {
     final colors = File('lib/app/theme/app_colors.dart').readAsStringSync();
     final background = File(
       'lib/shared/widgets/otya_mountain_background.dart',
