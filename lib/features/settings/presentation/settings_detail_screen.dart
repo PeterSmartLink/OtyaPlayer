@@ -176,6 +176,13 @@ class SettingsDetailScreen extends ConsumerWidget {
             ),
             const _Line(),
             _NavTile(
+              icon: Icons.battery_saver_rounded,
+              title: 'Keep music playing',
+              subtitle: 'If Android stops Otya in the background, set Battery to Unrestricted',
+              onTap: () => _showBackgroundPlaybackHelp(context),
+            ),
+            const _Line(),
+            _NavTile(
               icon: Icons.settings_applications_rounded,
               title: 'Android app permissions',
               subtitle: 'Review media, notification and device permissions',
@@ -216,6 +223,31 @@ class SettingsDetailScreen extends ConsumerWidget {
               onTap: () => context.push('/about'),
             ),
           ]),
+        ],
+      ),
+    );
+  }
+
+  static Future<void> _showBackgroundPlaybackHelp(BuildContext context) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Keep music playing'),
+        content: const Text(
+          'Otya keeps music in Android\'s foreground media service. If your phone still stops it after a few minutes, open Android settings, choose Battery, then allow Unrestricted battery use for Otya. Do not force-stop Otya while music is playing.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              openAppSettings();
+            },
+            child: const Text('Open Android settings'),
+          ),
         ],
       ),
     );
