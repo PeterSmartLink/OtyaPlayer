@@ -15,7 +15,7 @@ void main() {
     );
     expect(push, contains('UpdateDialog.checkAndShow(context, forceCheck: true)'));
     expect(push, isNot(contains('required String downloadUrl')));
-    expect(push, isNot(contains("payload: safeUrl.isNotEmpty ?")));
+    expect(push, isNot(contains('payload: safeUrl.isNotEmpty ?')));
     expect(fcm, contains("payload: 'update:native'"));
 
     final foregroundStart = fcm.indexOf("if (type == 'update')");
