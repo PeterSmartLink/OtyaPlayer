@@ -283,11 +283,13 @@ class AudioHandlerSingleton {
     if (h == null) return;
 
     final pendingPlayer = _pendingPlayer;
-    if (pendingPlayer != null) {
-      _pendingPlayer = null;
-      h.attachPlayer(pendingPlayer);
-    }
+    _pendingPlayer = null;
 
+    // Recovery can happen after media_kit has already begun playing. Publish
+    // queued metadata before attaching that live player so audio_service never
+    // has to promote the Android foreground service from a metadata-less state.
+    // On Android 13+ the system media surface is populated from MediaSession
+    // state, so this ordering is part of the notification contract.
     final pendingItem = _pendingMediaItem;
     if (pendingItem != null) {
       _pendingMediaItem = null;
@@ -296,6 +298,10 @@ class AudioHandlerSingleton {
           duration: pendingItem.duration ?? pendingPlayer?.state.duration,
         ),
       );
+    }
+
+    if (pendingPlayer != null) {
+      h.attachPlayer(pendingPlayer);
     }
 
     final pendingPlaying = _pendingPlaying;
