@@ -10,8 +10,8 @@ import '../services/update_service.dart';
 import '../services/update_download_status.dart';
 
 /// Native direct-update surface for website-distributed Otya builds.
-/// The APK is downloaded without a browser and Android's package installer is
-/// opened only after the user explicitly chooses Install update.
+/// The APK is downloaded without a browser. Android's trusted Downloads/file
+/// surface owns the final user-approved install handoff.
 class UpdateDialog extends StatefulWidget {
   const UpdateDialog({super.key, required this.info});
   final UpdateInfo info;
@@ -149,19 +149,11 @@ class _UpdateDialogState extends State<UpdateDialog> with WidgetsBindingObserver
     }
 
     try {
-      if (_status.isComplete) {
-        final outcome = await _downloads.invokeMethod<String>(
-          'install',
+      if (_status.isActive || _status.isComplete) {
+        await _downloads.invokeMethod<void>(
+          'showDownloads',
           {'tag': widget.info.tag},
         );
-        if (outcome == 'permission_required' && mounted) {
-          setState(() {
-            _error =
-                'Allow Otya to install this update in Android settings, return here, then tap Install update again.';
-          });
-        }
-      } else if (_status.isActive) {
-        await _downloads.invokeMethod<void>('showDownloads');
       } else {
         final id = await _downloads.invokeMethod<int>('download', {
           'url': uri.toString(),
@@ -196,12 +188,12 @@ class _UpdateDialogState extends State<UpdateDialog> with WidgetsBindingObserver
 
   String get _guidance {
     if (_status.isComplete) {
-      return 'The verified update is ready. Tap Install update and Android will ask you to approve replacing the current Otya build.';
+      return 'The verified update is ready. Open the downloaded update in Android to approve installation. No website is used.';
     }
     if (_status.isActive) {
-      return 'Otya started the update download through Android. It can continue in the background without opening a website.';
+      return 'Otya started the verified update download through Android. It can continue in the background without opening a website.';
     }
-    return 'Download the verified update directly in Otya. When it finishes, Otya will open Android’s installer for your approval.';
+    return 'Download the verified update directly from Otya. The browser and public download page are not part of this update flow.';
   }
 
   @override
@@ -287,7 +279,7 @@ class _UpdateDialogState extends State<UpdateDialog> with WidgetsBindingObserver
                 )
               : Icon(
                   _status.isComplete
-                      ? Icons.install_mobile_rounded
+                      ? Icons.system_update_alt_rounded
                       : _status.isActive
                           ? Icons.downloading_rounded
                           : Icons.download_rounded,
@@ -296,7 +288,7 @@ class _UpdateDialogState extends State<UpdateDialog> with WidgetsBindingObserver
             _opening
                 ? 'Opening…'
                 : _status.isComplete
-                    ? 'Install update'
+                    ? 'Open downloaded update'
                     : _status.isActive
                         ? 'View download'
                         : _status.canRetry
