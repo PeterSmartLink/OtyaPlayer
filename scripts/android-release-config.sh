@@ -24,11 +24,6 @@ configure_otya_release_defines() {
       ;;
   esac
 
-  # Flutter consumes SELF_UPDATE as a Dart define while Gradle consumes the
-  # exported value to include/remove REQUEST_INSTALL_PACKAGES in the merged
-  # Android manifest. Keeping both sourced from one value prevents channel drift.
-  export OTYA_SELF_UPDATE="$self_update"
-
   OTYA_RELEASE_DART_DEFINES=(
     "--dart-define=SELF_UPDATE=${self_update}"
     "--dart-define=OTYA_ENABLE_WATCH_TOGETHER=${OTYA_ENABLE_WATCH_TOGETHER}"
