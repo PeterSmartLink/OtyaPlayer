@@ -31,7 +31,15 @@ Future<void> main() async {
   await runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
 
+    // Register the process-level recovery hook immediately, then initialise the
+    // media service before the UI can start playback. audio_service is designed
+    // to register its AudioHandler during app startup; doing this before
+    // runApp removes the race where media_kit could already be playing while
+    // Android still had no foreground MediaSession/Now Playing notification.
+    AudioHandlerSingleton.instance.configureEnsureReady(_ensurePlaybackPlatform);
+
     await CrashReporter.instance.init();
+    await _safeBackground('playback platform', _ensurePlaybackPlatform);
 
     final settingsNotifier = SettingsNotifier(const AppSettings());
 
@@ -82,13 +90,8 @@ Future<void> _initBackground(
   AppSettings savedSettings,
   bool databaseReady,
 ) async {
-  // Playback is the only startup subsystem that owns a long-lived Android
-  // foreground service. Register a recovery callback before the first attempt:
-  // if release timing/platform startup causes that attempt to fail, the next
-  // Now Playing update can retry instead of leaving playback with no system UI.
-  AudioHandlerSingleton.instance.configureEnsureReady(_ensurePlaybackPlatform);
-  await _safeBackground('playback platform', _ensurePlaybackPlatform);
-
+  // Playback is already registered before runApp. Everything below is
+  // secondary startup work and must never delay or own the MediaSession.
   PipService.listenForNativePause(
     () => PlaybackCoordinator.instance.activePlayer?.pause(),
     () => PlaybackCoordinator.instance.activePlayer?.play(),
