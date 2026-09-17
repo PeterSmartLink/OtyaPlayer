@@ -40,6 +40,7 @@ Future<void> main() async {
 
     await CrashReporter.instance.init();
     await _safeBackground('playback platform', _ensurePlaybackPlatform);
+    await _safeBackground('system UI', _configureSystemUi);
 
     final settingsNotifier = SettingsNotifier(const AppSettings());
 
@@ -183,23 +184,10 @@ Future<void> _ensurePlaybackPlatform() {
 }
 
 Future<void> _initPlaybackPlatformOnce() async {
+  // Keep the media engine and Android MediaSession in one isolated startup
+  // path. Orientation/navigation-bar setup is deliberately separate so an
+  // unrelated SystemChrome failure can never prevent Now Playing from existing.
   MediaKit.ensureInitialized();
-
-  await SystemChrome.setPreferredOrientations(const [
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-    DeviceOrientation.landscapeLeft,
-    DeviceOrientation.landscapeRight,
-  ]);
-  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-    systemNavigationBarColor: Colors.transparent,
-    systemNavigationBarDividerColor: Colors.transparent,
-    systemNavigationBarIconBrightness: Brightness.light,
-    systemNavigationBarContrastEnforced: false,
-  ));
 
   final audioHandler = await AudioService.init(
     builder: () => OtyaAudioHandler(),
@@ -221,6 +209,24 @@ Future<void> _initPlaybackPlatformOnce() async {
     ),
   );
   AudioHandlerSingleton.instance.handler = audioHandler;
+}
+
+Future<void> _configureSystemUi() async {
+  await SystemChrome.setPreferredOrientations(const [
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ]);
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarDividerColor: Colors.transparent,
+    systemNavigationBarIconBrightness: Brightness.light,
+    systemNavigationBarContrastEnforced: false,
+  ));
 }
 
 Future<void> _safeBackground(
