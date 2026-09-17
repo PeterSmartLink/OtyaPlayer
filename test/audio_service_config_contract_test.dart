@@ -32,4 +32,18 @@ void main() {
     expect(startup, greaterThan(configure));
     expect(runApp, greaterThan(startup));
   });
+
+  test('system UI configuration cannot block AudioService initialization', () {
+    final source = File('lib/main.dart').readAsStringSync();
+
+    final playbackStart = source.indexOf('Future<void> _initPlaybackPlatformOnce()');
+    final systemUiStart = source.indexOf('Future<void> _configureSystemUi()');
+    final playbackSection = source.substring(playbackStart, systemUiStart);
+
+    expect(playbackStart, greaterThanOrEqualTo(0));
+    expect(systemUiStart, greaterThan(playbackStart));
+    expect(playbackSection, contains('AudioService.init('));
+    expect(playbackSection, isNot(contains('SystemChrome.')));
+    expect(source, contains("_safeBackground('system UI', _configureSystemUi)"));
+  });
 }
