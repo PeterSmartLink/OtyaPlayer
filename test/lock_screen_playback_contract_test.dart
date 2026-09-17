@@ -83,4 +83,21 @@ void main() {
       contains('generation != _metadataGeneration || artUri == null'),
     );
   });
+
+  test('recovery publishes metadata before attaching a live player', () {
+    final source =
+        File('lib/core/services/audio_handler.dart').readAsStringSync();
+
+    final setterStart = source.indexOf('set handler(OtyaAudioHandler? h)');
+    final setterEnd = source.indexOf('void attachPlayer(Player player)', setterStart);
+    final setter = source.substring(setterStart, setterEnd);
+
+    final metadata = setter.indexOf('h.mediaItem.add(');
+    final attach = setter.indexOf('h.attachPlayer(pendingPlayer);');
+
+    expect(setterStart, greaterThanOrEqualTo(0));
+    expect(setterEnd, greaterThan(setterStart));
+    expect(metadata, greaterThanOrEqualTo(0));
+    expect(attach, greaterThan(metadata));
+  });
 }
