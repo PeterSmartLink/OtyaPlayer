@@ -267,14 +267,27 @@ class MediaNotificationService {
     // and lock-screen controls on Android 13+ without interrupting onboarding.
     unawaited(NotificationService.instance.requestPermissionOnce());
     final generation = ++_metadataGeneration;
+
+    // Publish title/artist/play state synchronously before the first await.
+    // The player stream calls show() as playback starts, so this guarantees the
+    // MediaItem exists before another listener can promote the Android
+    // foreground media service with playing=true. If AudioService is still
+    // recovering, AudioHandlerSingleton queues this exact state and flushes it
+    // metadata-first when the handler becomes ready.
+    _publishNowPlaying(
+      id: id,
+      title: title,
+      artist: artist,
+      isPlaying: isPlaying,
+      artUri: _cachedArtworkFor(id),
+    );
+
     if (!_initialized) await init();
     await _ensureMediaSession();
     if (generation != _metadataGeneration) return;
 
-    // Notification/lock-screen controls are the primary contract. Publish them
-    // immediately and never make them wait for album-art file IO, MediaStore
-    // resolution or a remote artwork request. If this track already has cached
-    // artwork, reuse it in the first update.
+    // Republish after recovery in case the initial synchronous write was queued.
+    // Artwork is deliberately not required for the core media notification.
     _publishNowPlaying(
       id: id,
       title: title,
@@ -306,6 +319,17 @@ class MediaNotificationService {
   }) async {
     unawaited(NotificationService.instance.requestPermissionOnce());
     final generation = ++_metadataGeneration;
+
+    // Bitmap artwork must never gate the core MediaSession either. Publish the
+    // textual metadata synchronously, then recover/init and add artwork later.
+    _publishNowPlaying(
+      id: id,
+      title: title,
+      artist: artist,
+      isPlaying: isPlaying,
+      artUri: _cachedArtworkFor(id),
+    );
+
     if (!_initialized) await init();
     await _ensureMediaSession();
     if (generation != _metadataGeneration) return;
