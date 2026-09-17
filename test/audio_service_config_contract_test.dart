@@ -16,4 +16,20 @@ void main() {
       ),
     );
   });
+
+  test('media session is registered before runApp can start playback', () {
+    final source = File('lib/main.dart').readAsStringSync();
+
+    final configure = source.indexOf(
+      'AudioHandlerSingleton.instance.configureEnsureReady(_ensurePlaybackPlatform);',
+    );
+    final startup = source.indexOf(
+      "await _safeBackground('playback platform', _ensurePlaybackPlatform);",
+    );
+    final runApp = source.indexOf('runApp(');
+
+    expect(configure, greaterThanOrEqualTo(0));
+    expect(startup, greaterThan(configure));
+    expect(runApp, greaterThan(startup));
+  });
 }
