@@ -83,4 +83,38 @@ void main() {
       contains('generation != _metadataGeneration || artUri == null'),
     );
   });
+
+  test('Now Playing metadata is published before the first async wait', () {
+    final source = File(
+      'lib/core/services/media_notification_service.dart',
+    ).readAsStringSync();
+
+    final showStart = source.indexOf('Future<void> show({');
+    final showEnd = source.indexOf('Future<void> showWithBitmap({', showStart);
+    final show = source.substring(showStart, showEnd);
+    final metadata = show.indexOf('_publishNowPlaying(');
+    final firstAwait = show.indexOf('await init()');
+
+    expect(showStart, greaterThanOrEqualTo(0));
+    expect(showEnd, greaterThan(showStart));
+    expect(metadata, greaterThanOrEqualTo(0));
+    expect(firstAwait, greaterThan(metadata));
+  });
+
+  test('recovery publishes metadata before attaching a live player', () {
+    final source =
+        File('lib/core/services/audio_handler.dart').readAsStringSync();
+
+    final setterStart = source.indexOf('set handler(OtyaAudioHandler? h)');
+    final setterEnd = source.indexOf('void attachPlayer(Player player)', setterStart);
+    final setter = source.substring(setterStart, setterEnd);
+
+    final metadata = setter.indexOf('h.mediaItem.add(');
+    final attach = setter.indexOf('h.attachPlayer(pendingPlayer);');
+
+    expect(setterStart, greaterThanOrEqualTo(0));
+    expect(setterEnd, greaterThan(setterStart));
+    expect(metadata, greaterThanOrEqualTo(0));
+    expect(attach, greaterThan(metadata));
+  });
 }

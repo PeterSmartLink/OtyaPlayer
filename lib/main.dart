@@ -31,7 +31,16 @@ Future<void> main() async {
   await runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
 
+    // Register the process-level recovery hook immediately, then initialise the
+    // media service before the UI can start playback. audio_service is designed
+    // to register its AudioHandler during app startup; doing this before
+    // runApp removes the race where media_kit could already be playing while
+    // Android still had no foreground MediaSession/Now Playing notification.
+    AudioHandlerSingleton.instance.configureEnsureReady(_ensurePlaybackPlatform);
+
     await CrashReporter.instance.init();
+    await _safeBackground('playback platform', _ensurePlaybackPlatform);
+    await _safeBackground('system UI', _configureSystemUi);
 
     final settingsNotifier = SettingsNotifier(const AppSettings());
 
@@ -82,13 +91,8 @@ Future<void> _initBackground(
   AppSettings savedSettings,
   bool databaseReady,
 ) async {
-  // Playback is the only startup subsystem that owns a long-lived Android
-  // foreground service. Register a recovery callback before the first attempt:
-  // if release timing/platform startup causes that attempt to fail, the next
-  // Now Playing update can retry instead of leaving playback with no system UI.
-  AudioHandlerSingleton.instance.configureEnsureReady(_ensurePlaybackPlatform);
-  await _safeBackground('playback platform', _ensurePlaybackPlatform);
-
+  // Playback is already registered before runApp. Everything below is
+  // secondary startup work and must never delay or own the MediaSession.
   PipService.listenForNativePause(
     () => PlaybackCoordinator.instance.activePlayer?.pause(),
     () => PlaybackCoordinator.instance.activePlayer?.play(),
@@ -180,23 +184,10 @@ Future<void> _ensurePlaybackPlatform() {
 }
 
 Future<void> _initPlaybackPlatformOnce() async {
+  // Keep the media engine and Android MediaSession in one isolated startup
+  // path. Orientation/navigation-bar setup is deliberately separate so an
+  // unrelated SystemChrome failure can never prevent Now Playing from existing.
   MediaKit.ensureInitialized();
-
-  await SystemChrome.setPreferredOrientations(const [
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-    DeviceOrientation.landscapeLeft,
-    DeviceOrientation.landscapeRight,
-  ]);
-  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-    systemNavigationBarColor: Colors.transparent,
-    systemNavigationBarDividerColor: Colors.transparent,
-    systemNavigationBarIconBrightness: Brightness.light,
-    systemNavigationBarContrastEnforced: false,
-  ));
 
   final audioHandler = await AudioService.init(
     builder: () => OtyaAudioHandler(),
@@ -218,6 +209,24 @@ Future<void> _initPlaybackPlatformOnce() async {
     ),
   );
   AudioHandlerSingleton.instance.handler = audioHandler;
+}
+
+Future<void> _configureSystemUi() async {
+  await SystemChrome.setPreferredOrientations(const [
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ]);
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarDividerColor: Colors.transparent,
+    systemNavigationBarIconBrightness: Brightness.light,
+    systemNavigationBarContrastEnforced: false,
+  ));
 }
 
 Future<void> _safeBackground(
