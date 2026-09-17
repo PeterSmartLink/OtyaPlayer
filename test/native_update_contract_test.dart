@@ -9,7 +9,10 @@ void main() {
     ).readAsStringSync();
     final fcm = File('lib/core/services/fcm_service.dart').readAsStringSync();
 
-    expect(push, contains("static const _nativeUpdatePayload = '\${_prefixUpdate}native';"));
+    expect(
+      push,
+      contains("static const _nativeUpdatePayload = '\${_prefixUpdate}native';"),
+    );
     expect(push, contains('UpdateDialog.checkAndShow(context, forceCheck: true)'));
     expect(push, isNot(contains('required String downloadUrl')));
     expect(push, isNot(contains("payload: safeUrl.isNotEmpty ?")));
@@ -25,25 +28,25 @@ void main() {
     expect(foregroundUpdate, isNot(contains("message.data['url']")));
   });
 
-  test('completed direct update opens Android package installer', () {
+  test('completed direct update hands off to Android Downloads, not web', () {
     final native = File(
       'android/app/src/main/kotlin/com/otyaplayer/app/UpdateDownloads.kt',
     ).readAsStringSync();
     final dialog =
         File('lib/core/widgets/update_dialog.dart').readAsStringSync();
 
-    expect(native, contains('"install" ->'));
-    expect(native, contains('getUriForDownloadedFile(id)'));
-    expect(native, contains('Intent(Intent.ACTION_VIEW)'));
-    expect(native, contains('Intent.FLAG_GRANT_READ_URI_PERMISSION'));
-    expect(native, contains('canRequestPackageInstalls()'));
-    expect(native, contains('Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES'));
-    expect(dialog, contains("'install',"));
-    expect(dialog, contains("? 'Install update'"));
+    expect(native, contains('DownloadManager.ACTION_VIEW_DOWNLOADS'));
+    expect(native, contains('private fun openDownloads(tag: String)'));
+    expect(native, isNot(contains('canRequestPackageInstalls()')));
+    expect(native, isNot(contains('ACTION_MANAGE_UNKNOWN_APP_SOURCES')));
+    expect(native, isNot(contains('"install" ->')));
+    expect(dialog, contains("'showDownloads',"));
+    expect(dialog, contains("? 'Open downloaded update'"));
+    expect(dialog, contains('No website is used.'));
     expect(dialog, contains('without opening a website'));
   });
 
-  test('installer permission follows SELF_UPDATE channel', () {
+  test('public updater does not request package installer authority', () {
     final manifest =
         File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
     final gradle = File('android/app/build.gradle').readAsStringSync();
@@ -52,14 +55,11 @@ void main() {
 
     expect(
       manifest,
-      contains('android.permission.REQUEST_INSTALL_PACKAGES'),
+      isNot(contains('android.permission.REQUEST_INSTALL_PACKAGES')),
     );
-    expect(manifest, contains('tools:node="\${otyaInstallerPermissionNode}"'));
-    expect(gradle, contains('System.getenv("OTYA_SELF_UPDATE")'));
-    expect(
-      gradle,
-      contains('otyaInstallerPermissionNode: otyaSelfUpdateEnabled ? "merge" : "remove"'),
-    );
-    expect(config, contains('export OTYA_SELF_UPDATE="$self_update"'));
+    expect(gradle, isNot(contains('otyaInstallerPermissionNode')));
+    expect(gradle, isNot(contains('System.getenv("OTYA_SELF_UPDATE")')));
+    expect(config, isNot(contains('export OTYA_SELF_UPDATE=')));
+    expect(config, contains('SELF_UPDATE=${self_update}'));
   });
 }
