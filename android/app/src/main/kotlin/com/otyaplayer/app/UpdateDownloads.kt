@@ -7,11 +7,10 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
-import android.provider.Settings
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodChannel
 
-/** Native direct-update bridge for website-distributed Otya APK builds. */
+/** Native direct-update bridge. Browser navigation is never part of this path. */
 class UpdateDownloads(private val activity: Activity) {
     companion object {
         private const val APK_CONTENT_TYPE = "application/vnd.android.package-archive"
@@ -113,38 +112,13 @@ class UpdateDownloads(private val activity: Activity) {
         return id
     }
 
-    /**
-     * Opens Android's trusted package installer for the completed Otya APK.
-     * Android still requires an explicit user confirmation; Otya never silently
-     * installs or replaces an application package.
-     */
-    private fun openInstaller(tag: String): String {
+    private fun openDownloads(tag: String) {
         requireTag(tag)
-        require(snapshot(tag)["status"] == "complete")
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-            !activity.packageManager.canRequestPackageInstalls()
-        ) {
-            val permissionIntent = Intent(
-                Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                Uri.parse("package:${activity.packageName}"),
-            )
-            activity.startActivity(permissionIntent)
-            return "permission_required"
-        }
-
-        val id = prefs().getLong(tag, -1)
-        require(id != -1L)
-        val apkUri = manager().getUriForDownloadedFile(id)
-            ?: throw IllegalStateException("Downloaded APK is unavailable")
-
-        val installIntent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(apkUri, APK_CONTENT_TYPE)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        require(installIntent.resolveActivity(activity.packageManager) != null)
-        activity.startActivity(installIntent)
-        return "installer_opened"
+        require(snapshot(tag)["status"] in setOf("pending", "running", "paused", "complete"))
+        // Otya deliberately does not request REQUEST_INSTALL_PACKAGES. The
+        // trusted Android Downloads surface owns the final file-open/install
+        // handoff after Otya has completed the verified background download.
+        activity.startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS))
     }
 
     fun register(messenger: BinaryMessenger) {
@@ -160,12 +134,9 @@ class UpdateDownloads(private val activity: Activity) {
                         val tag = call.argument<String>("tag") ?: ""
                         result.success(snapshot(tag))
                     }
-                    "install" -> {
-                        val tag = call.argument<String>("tag") ?: ""
-                        result.success(openInstaller(tag))
-                    }
                     "showDownloads" -> {
-                        activity.startActivity(Intent(DownloadManager.ACTION_VIEW_DOWNLOADS))
+                        val tag = call.argument<String>("tag") ?: ""
+                        openDownloads(tag)
                         result.success(null)
                     }
                     else -> result.notImplemented()
