@@ -12,6 +12,11 @@ plugins {
 def otyaBrandSource = file("../../assets/branding/otya_app_icon.webp")
 def generatedOtyaBrandRes = file("${buildDir}/generated/otya-brand-res")
 
+// Direct/R2 APKs may update themselves after explicit user approval. Google
+// Play builds must not request Android's sideload installer permission. The
+// shared release script exports this value before each Flutter build.
+def otyaSelfUpdateEnabled = (System.getenv("OTYA_SELF_UPDATE") ?: "false").toBoolean()
+
 android {
     namespace = "com.otyaplayer.app"
     compileSdk = 36
@@ -41,6 +46,9 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         multiDexEnabled = true
+        manifestPlaceholders = [
+            otyaInstallerPermissionNode: otyaSelfUpdateEnabled ? "merge" : "remove"
+        ]
 
         // Otya v1 currently ships its own UI in English only. Android/system
         // components still localize themselves normally; this only avoids
