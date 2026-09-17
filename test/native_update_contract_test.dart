@@ -60,6 +60,6 @@ void main() {
     expect(gradle, isNot(contains('otyaInstallerPermissionNode')));
     expect(gradle, isNot(contains('System.getenv("OTYA_SELF_UPDATE")')));
     expect(config, isNot(contains('export OTYA_SELF_UPDATE=')));
-    expect(config, contains('SELF_UPDATE=${self_update}'));
+    expect(config, contains(r'SELF_UPDATE=${self_update}'));
   });
 }
