@@ -3,6 +3,19 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('focus activation cannot race the deferred audio-session bootstrap', () {
+    final source = File(
+      'lib/core/services/audio_session_service.dart',
+    ).readAsStringSync();
+
+    expect(source, contains('Future<void>? _initialization;'));
+    expect(source, contains('final inFlight = _initialization;'));
+    expect(source, contains('await inFlight;'));
+    expect(source, contains('final attempt = _configureSession();'));
+    expect(source, contains('await init(pauseDuringCalls: _pauseDuringCalls);'));
+    expect(source, contains('AudioSessionConfiguration.music()'));
+  });
+
   test('call/interruption resume reacquires focus for the exact paused player', () {
     final source = File(
       'lib/core/services/audio_session_service.dart',
