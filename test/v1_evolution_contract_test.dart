@@ -31,13 +31,16 @@ void main() {
     expect(workflow, isNot(contains(r'keytool -printcert -jarfile "$APK"')));
   });
 
-  test('production releases use immutable semantic-version build tags', () {
+  test('manual production releases use immutable semantic-version build tags', () {
     final directRelease = File('.github/workflows/release-apk.yml').readAsStringSync();
     final release = File('.github/workflows/release.yml').readAsStringSync();
 
     expect(directRelease, contains('Verify semantic release identity'));
     expect(directRelease, contains(r'^[0-9]+\.[0-9]+\.[0-9]+\+[1-9][0-9]*$'));
-    expect(release, contains("- 'v*'"));
+    expect(release, contains('workflow_dispatch:'));
+    expect(release, isNot(contains('push:\n    tags:')));
+    expect(release, contains('confirmTag:'));
+    expect(release, contains('approval:'));
     expect(release, contains(r'^v[0-9]+\.[0-9]+\.[0-9]+\+[1-9][0-9]*$'));
     expect(release, contains(r'^[0-9]+\.[0-9]+\.[0-9]+\+[1-9][0-9]*$'));
     expect(release, contains('APP_VERSION='));

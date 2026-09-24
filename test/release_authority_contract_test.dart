@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('release publishing never rewrites tags and requires tag to match main', () {
+  test('release publishing is manual, explicit, and never rewrites tags', () {
     final source = File('.github/workflows/release.yml').readAsStringSync();
 
     expect(source, isNot(contains('git tag -f')));
@@ -15,6 +15,15 @@ void main() {
       source,
       contains(r'immutable tag $RELEASE_TAG does not point to current main'),
     );
-    expect(source, contains("- 'v*'"));
+    expect(source, contains('workflow_dispatch:'));
+    expect(source, isNot(contains('push:\n    tags:')));
+    expect(source, contains('confirmTag:'));
+    expect(source, contains('approval:'));
+    expect(source, contains(r'RELEASE_TAG_INPUT: ${{ inputs.tag }}'));
+    expect(source, contains(r'CONFIRM_TAG_INPUT: ${{ inputs.confirmTag }}'));
+    expect(source, contains(r'RELEASE_APPROVAL_INPUT: ${{ inputs.approval }}'));
+    expect(source, contains(r'TAG="$RELEASE_TAG_INPUT"'));
+    expect(source, contains(r'[ "$CONFIRM_TAG" = "$TAG" ]'));
+    expect(source, contains(r'''[ "$APPROVAL" = 'PUBLISH' ]'''));
   });
 }
