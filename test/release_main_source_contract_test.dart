@@ -25,13 +25,11 @@ void main() {
     expect(publish, greaterThan(build));
   });
 
-  test('manual production release still checks out main', () {
+  test('manual production release always checks out main', () {
     final source = File('.github/workflows/release.yml').readAsStringSync();
     expect(
       source,
-      contains(
-        r"ref: ${{ github.event_name == 'workflow_dispatch' && 'refs/heads/main' || github.ref }}",
-      ),
+      contains('ref: refs/heads/main'),
     );
   });
 }
