@@ -5,18 +5,23 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
         description: 'Existing immutable build tag to publish (for example v1.0.0+2)'
         required: true
         type: string
+      confirmTag:
+        description: 'Re-enter the exact immutable tag to confirm this release'
+        required: true
+        type: string
+      approval:
+        description: 'Type PUBLISH to authorize the production release'
+        required: true
+        type: string
 
 concurrency:
-  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  group: release-${{ inputs.tag }}
   cancel-in-progress: false
 
 permissions:
@@ -39,13 +44,23 @@ jobs:
       - name: Resolve immutable release tag
         id: release
         shell: bash
+        env:
+          RELEASE_TAG_INPUT: ${{ inputs.tag }}
+          CONFIRM_TAG_INPUT: ${{ inputs.confirmTag }}
+          RELEASE_APPROVAL_INPUT: ${{ inputs.approval }}
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG='${{ inputs.tag }}'
-          else
-            TAG='${{ github.ref_name }}'
-          fi
+          TAG="$RELEASE_TAG_INPUT"
+          CONFIRM_TAG="$CONFIRM_TAG_INPUT"
+          APPROVAL="$RELEASE_APPROVAL_INPUT"
+          [ "$CONFIRM_TAG" = "$TAG" ] || {
+            echo "ERROR: confirmTag must exactly match the immutable release tag"
+            exit 1
+          }
+          [ "$APPROVAL" = 'PUBLISH' ] || {
+            echo "ERROR: production release requires approval=PUBLISH"
+            exit 1
+          }
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\+[1-9][0-9]*$ ]] || {
             echo "ERROR: Otya release tags must look like v<version>+<positive-build>; refusing $TAG"
             exit 1
@@ -98,7 +113,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'workflow_dispatch' && 'refs/heads/main' || github.ref }}
+          ref: refs/heads/main
 
       - name: Prove tag, main and pubspec are the same build
         shell: bash
