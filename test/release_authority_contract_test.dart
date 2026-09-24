@@ -19,11 +19,11 @@ void main() {
     expect(source, isNot(contains('push:\n    tags:')));
     expect(source, contains('confirmTag:'));
     expect(source, contains('approval:'));
-    expect(source, contains('RELEASE_TAG_INPUT: \${{ inputs.tag }}'));
-    expect(source, contains('CONFIRM_TAG_INPUT: \${{ inputs.confirmTag }}'));
-    expect(source, contains('RELEASE_APPROVAL_INPUT: \${{ inputs.approval }}'));
-    expect(source, contains('TAG="$RELEASE_TAG_INPUT"'));
-    expect(source, contains("[ \"\$CONFIRM_TAG\" = \"\$TAG\" ]"));
-    expect(source, contains("[ \"\$APPROVAL\" = 'PUBLISH' ]"));
+    expect(source, contains(r'RELEASE_TAG_INPUT: ${{ inputs.tag }}'));
+    expect(source, contains(r'CONFIRM_TAG_INPUT: ${{ inputs.confirmTag }}'));
+    expect(source, contains(r'RELEASE_APPROVAL_INPUT: ${{ inputs.approval }}'));
+    expect(source, contains(r'TAG="$RELEASE_TAG_INPUT"'));
+    expect(source, contains(r'[ "$CONFIRM_TAG" = "$TAG" ]'));
+    expect(source, contains(r'''[ "$APPROVAL" = 'PUBLISH' ]'''));
   });
 }
