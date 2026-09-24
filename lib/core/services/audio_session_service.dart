@@ -18,6 +18,7 @@ class AudioSessionService {
   AudioSession? _session;
   StreamSubscription<AudioInterruptionEvent>? _interruptionSub;
   StreamSubscription<void>? _noisySub;
+  Future<void>? _initialization;
   bool _initialized = false;
   bool _pauseDuringCalls = true;
   bool _resumeAfterInterruption = false;
@@ -26,6 +27,34 @@ class AudioSessionService {
   double? _volumeBeforeDuck;
 
   Future<void> init({required bool pauseDuringCalls}) async {
+    // Startup calls can arrive from the first-frame bootstrap and from the
+    // first MediaSession command at nearly the same time. Keep a single
+    // initialization flight so neither path installs competing interruption
+    // listeners or leaves Android focus configured only half-way through.
+    final inFlight = _initialization;
+    if (inFlight != null) {
+      await inFlight;
+      await setPauseDuringCalls(pauseDuringCalls);
+      return;
+    }
+
+    if (!_initialized) {
+      final attempt = _configureSession();
+      _initialization = attempt;
+      try {
+        await attempt;
+      } finally {
+        if (identical(_initialization, attempt)) _initialization = null;
+      }
+    }
+
+    await setPauseDuringCalls(pauseDuringCalls);
+    debugPrint(
+      '[AudioSession] configured; pauseDuringCalls=$_pauseDuringCalls.',
+    );
+  }
+
+  Future<void> _configureSession() async {
     if (!_initialized) {
       final session = await AudioSession.instance;
       _session = session;
@@ -41,11 +70,6 @@ class AudioSessionService {
       );
       _initialized = true;
     }
-
-    await setPauseDuringCalls(pauseDuringCalls);
-    debugPrint(
-      '[AudioSession] configured; pauseDuringCalls=$_pauseDuringCalls.',
-    );
   }
 
   Future<void> setPauseDuringCalls(bool enabled) async {
@@ -93,6 +117,18 @@ class AudioSessionService {
   /// but doing so is unreliable after calls, Bluetooth route changes, or after
   /// Android has removed and recreated the media notification.
   Future<bool> activate() async {
+    // The UI bootstrap intentionally defers secondary work until after the
+    // first frame. A lock-screen/Bluetooth command or a very fast first tap
+    // can therefore reach this method before that work. Configure the same
+    // music policy here instead of activating Android's default session.
+    if (!_initialized) {
+      try {
+        await init(pauseDuringCalls: _pauseDuringCalls);
+      } catch (error) {
+        debugPrint('[AudioSession] initial configuration failed: $error');
+        return false;
+      }
+    }
     final session = _session ?? await AudioSession.instance;
     _session = session;
     try {
@@ -214,6 +250,7 @@ class AudioSessionService {
     _duckedPlayer = null;
     _volumeBeforeDuck = null;
     _session = null;
+    _initialization = null;
     _initialized = false;
   }
 }
