@@ -23,8 +23,6 @@ Future<void> otyaFirebaseBackgroundHandler(RemoteMessage message) async {
   } catch (e) {
     debugPrint('[FCM:bg] Firebase init skipped: $e');
   }
-  // Android can display a notification payload while OTYA is backgrounded.
-  // OTYA processes navigation only after the user opens the app.
   debugPrint('[FCM:bg] message=${message.messageId}');
 }
 
@@ -38,9 +36,6 @@ class FcmService {
   bool _listenersAttached = false;
   Future<void>? _initInFlight;
 
-  /// Public destinations that a backend notification is allowed to open.
-  /// This is intentionally an allow-list: a remote push must not be able to
-  /// navigate to arbitrary internal/admin/debug screens.
   static const Set<String> _allowedRoutes = {
     '/',
     '/music',
@@ -101,11 +96,6 @@ class FcmService {
         _listenersAttached = true;
       }
 
-      // The transport is ready now. Initial-message lookup, public-topic
-      // subscription and token sync are recoverable follow-up work and must not
-      // attach duplicate listeners on a later init attempt. Ordinary notification
-      // consent remains user-driven from Settings; media-session playback does
-      // not need POST_NOTIFICATIONS.
       _initialized = true;
 
       await _syncPublicTopic(messaging);
@@ -142,9 +132,6 @@ class FcmService {
 
   Future<void> _syncPublicTopic(FirebaseMessaging messaging) async {
     try {
-      // Firebase topic subscriptions are idempotent. Keeping this on every
-      // recoverable sync makes app reinstalls/token rotation converge without
-      // requiring a server-side per-device fanout for public announcements.
       await messaging.subscribeToTopic(_publicTopic);
     } catch (e) {
       debugPrint('[FCM] public topic sync failed (non-fatal): $e');
@@ -158,8 +145,7 @@ class FcmService {
       final messaging = FirebaseMessaging.instance;
       await _syncPublicTopic(messaging);
       final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString(_keyFcmToken) ??
-          await messaging.getToken();
+      final token = prefs.getString(_keyFcmToken) ?? await messaging.getToken();
       if (token != null && token.isNotEmpty) {
         await _storeAndRegister(token);
       }
@@ -218,16 +204,10 @@ class FcmService {
     final type = message.data['type']?.toString();
     if (type == 'update') {
       final version = message.data['version']?.toString();
-      final downloadUrl = message.data['download_url']?.toString() ??
-          message.data['url']?.toString();
-      if (version != null &&
-          version.isNotEmpty &&
-          downloadUrl != null &&
-          downloadUrl.isNotEmpty) {
+      if (version != null && version.isNotEmpty) {
         await PushNotificationService.instance.showUpdateNotification(
           version: version,
           releaseNotes: body,
-          downloadUrl: downloadUrl,
         );
         return;
       }
@@ -250,7 +230,6 @@ class FcmService {
     if (raw == null || raw.trim().isEmpty) return null;
     var route = raw.trim();
 
-    // Preserve old notification payloads after the product rename/migration.
     if (route == '/ai') route = '/support';
     if (route == '/airdrop') route = '/transfer';
     if (route == '/home') route = '/';
@@ -259,15 +238,13 @@ class FcmService {
   }
 
   Future<void> _handleOpenedMessage(RemoteMessage message) async {
-    // Background and terminated-app update taps use the same trusted updater
-    // as foreground notifications; release metadata remains authoritative.
+    // Update pushes never trust or open a server-provided URL. The app rechecks
+    // canonical release metadata, then uses the native in-app updater.
     if (message.data['type']?.toString() == 'update') {
-      final target = message.data['download_url']?.toString() ??
-          message.data['url']?.toString() ?? '';
       PushNotificationService.instance.handleTap(NotificationResponse(
         notificationResponseType: NotificationResponseType.selectedNotification,
         id: PushNotificationService.idUpdate,
-        payload: 'update:$target',
+        payload: 'update:native',
       ));
       return;
     }
@@ -286,7 +263,6 @@ class FcmService {
         message.data['url']?.toString();
     if (rawUrl == null || rawUrl.isEmpty) return;
 
-    // Compatibility for local-notification payloads that contain an OTYA URI.
     final appUri = Uri.tryParse(rawUrl);
     if (appUri != null && appUri.scheme == 'otya' && appUri.host == 'app') {
       final appRoute = _canonicalRoute(appUri.path);

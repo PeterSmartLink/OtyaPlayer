@@ -68,11 +68,6 @@ void main() {
           final path = entity.path.replaceAll('\\', '/');
           final text = entity.readAsStringSync();
 
-          // Otya Transfer is intentionally local-network only and uses
-          // authenticated cleartext HTTP between nearby devices. Together's
-          // guest proxy also binds through Dart's IPv4 loopback API and never
-          // carries a configurable or remote backend URL. Both protocols have
-          // focused URI-policy tests that reject non-local addresses.
           final isLocalPeerTransportSource =
               path.startsWith('lib/features/transfer/') ||
               path ==
@@ -131,7 +126,8 @@ void main() {
       expect(updateService, isNot(contains('final aliasKey =')));
       expect(updateService, isNot(contains('downloads[exactKey] ??')));
       expect(updateService, contains('directUrl: directUrl'));
-      expect(updateService, contains('downloadUrl: pageUrl'));
+      expect(updateService, isNot(contains("downloads['auto']")));
+      expect(updateService, isNot(contains('downloadUrl: pageUrl')));
       expect(
         updateService,
         contains('tagBuild != serverVersionCode'),
