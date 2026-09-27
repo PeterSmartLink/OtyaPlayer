@@ -9,8 +9,9 @@ import '../../shared/widgets/otya_logo.dart';
 import '../services/update_service.dart';
 import '../services/update_download_status.dart';
 
-/// Download official direct-install updates without opening a web page.
-/// Android manages the background download and asks the user to install it.
+/// Native direct-update surface for website-distributed Otya builds.
+/// The APK is downloaded without a browser. Android's trusted Downloads/file
+/// surface owns the final user-approved install handoff.
 class UpdateDialog extends StatefulWidget {
   const UpdateDialog({super.key, required this.info});
   final UpdateInfo info;
@@ -50,8 +51,6 @@ class UpdateDialog extends StatefulWidget {
     }
   }
 
-  // Minimum-version policy is enforced at online-service boundaries. Otya
-  // never blocks a user's local media library behind an internet update.
   static bool updateIsMandatory(UpdateInfo info) => false;
 
   @override
@@ -126,7 +125,7 @@ class _UpdateDialogState extends State<UpdateDialog> with WidgetsBindingObserver
     super.dispose();
   }
 
-  Future<void> _openOfficialUpdate() async {
+  Future<void> _continueUpdate() async {
     if (_opening) return;
     _statusGeneration++;
     setState(() {
@@ -150,8 +149,11 @@ class _UpdateDialogState extends State<UpdateDialog> with WidgetsBindingObserver
     }
 
     try {
-      if (_downloadStarted) {
-        await _downloads.invokeMethod<void>('showDownloads');
+      if (_status.isActive || _status.isComplete) {
+        await _downloads.invokeMethod<void>(
+          'showDownloads',
+          {'tag': widget.info.tag},
+        );
       } else {
         final id = await _downloads.invokeMethod<int>('download', {
           'url': uri.toString(),
@@ -168,7 +170,7 @@ class _UpdateDialogState extends State<UpdateDialog> with WidgetsBindingObserver
     } catch (_) {
       if (mounted) {
         setState(() {
-          _error = 'The update download could not be opened. Please try again.';
+          _error = 'Otya could not continue the update. Please try again.';
         });
       }
     } finally {
@@ -182,6 +184,16 @@ class _UpdateDialogState extends State<UpdateDialog> with WidgetsBindingObserver
   Future<void> _later() async {
     await UpdateService.instance.remindLater(widget.info.versionCode);
     if (mounted) Navigator.of(context).pop();
+  }
+
+  String get _guidance {
+    if (_status.isComplete) {
+      return 'The verified update is ready. Open the downloaded update in Android to approve installation. No website is used.';
+    }
+    if (_status.isActive) {
+      return 'Otya started the verified update download through Android. It can continue in the background without opening a website.';
+    }
+    return 'Download the verified update directly from Otya. The browser and public download page are not part of this update flow.';
   }
 
   @override
@@ -234,14 +246,7 @@ class _UpdateDialogState extends State<UpdateDialog> with WidgetsBindingObserver
                 LinearProgressIndicator(value: _status.progress),
               const SizedBox(height: 10),
             ],
-            Text(
-              _downloadStarted
-                  ? 'Your download is managed by Android and can continue in the background. '
-                      'When it finishes, tap its notification to open the update.'
-                  : 'Download the update here, then approve installation in Android. '
-                      'Otya never silently installs packages.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+            Text(_guidance, style: Theme.of(context).textTheme.bodySmall),
             if (_error != null) ...[
               const SizedBox(height: 14),
               Container(
@@ -266,18 +271,30 @@ class _UpdateDialogState extends State<UpdateDialog> with WidgetsBindingObserver
           child: Text(_downloadStarted ? 'Close' : 'Later'),
         ),
         FilledButton.icon(
-          onPressed: _opening ? null : _openOfficialUpdate,
+          onPressed: _opening ? null : _continueUpdate,
           icon: _opening
               ? const SizedBox.square(
                   dimension: 18,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Icon(Icons.download_rounded),
-          label: Text(_opening
-              ? 'Opening…'
-              : _status.canRetry
-                  ? 'Retry download'
-                  : _downloadStarted ? 'View download' : 'Download update'),
+              : Icon(
+                  _status.isComplete
+                      ? Icons.system_update_alt_rounded
+                      : _status.isActive
+                          ? Icons.downloading_rounded
+                          : Icons.download_rounded,
+                ),
+          label: Text(
+            _opening
+                ? 'Opening…'
+                : _status.isComplete
+                    ? 'Open downloaded update'
+                    : _status.isActive
+                        ? 'View download'
+                        : _status.canRetry
+                            ? 'Retry download'
+                            : 'Download update',
+          ),
         ),
       ],
     );

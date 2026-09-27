@@ -9,8 +9,8 @@ import 'shared_notification_plugin.dart';
 
 /// Push/announcement notification owner for Otya.
 ///
-/// Update taps recheck release metadata and open the native update dialog.
-/// Download and installation remain explicit user actions.
+/// Update taps always recheck release metadata and open Otya's native update
+/// dialog. Web URLs are reserved for ordinary announcements, never updates.
 class PushNotificationService {
   PushNotificationService._();
   static final PushNotificationService instance = PushNotificationService._();
@@ -24,6 +24,7 @@ class PushNotificationService {
   static const _prefixUpdate = 'update:';
   static const _prefixUrl = 'url:';
   static const _officialHost = 'petersmartlink.com';
+  static const _nativeUpdatePayload = '${_prefixUpdate}native';
 
   bool _initialized = false;
 
@@ -39,7 +40,7 @@ class PushNotificationService {
     WidgetsBinding.instance.ensureVisualUpdate();
   }
 
-  bool _isOfficialUpdateUri(Uri? uri) {
+  bool _isOfficialHttpsUri(Uri? uri) {
     if (uri == null || uri.scheme != 'https' || uri.userInfo.isNotEmpty) {
       return false;
     }
@@ -53,16 +54,13 @@ class PushNotificationService {
       debugPrint('[PushNotif] tapped id=${response.id}');
     }
 
+    // The suffix is intentionally ignored. This also migrates old update
+    // notifications whose payload contained a website URL: tapping them now
+    // opens the native updater rather than launching that URL.
     if (payload.startsWith(_prefixUpdate)) {
-      final rawUrl = payload.substring(_prefixUpdate.length).trim();
-      final uri = Uri.tryParse(rawUrl);
-      if (_isOfficialUpdateUri(uri)) {
-        final context = AppRouter.navigatorKey.currentContext;
-        if (context != null && context.mounted) {
-          UpdateDialog.checkAndShow(context, forceCheck: true).ignore();
-        }
-      } else if (rawUrl.isNotEmpty) {
-        debugPrint('[PushNotif] blocked untrusted update URL.');
+      final context = AppRouter.navigatorKey.currentContext;
+      if (context != null && context.mounted) {
+        UpdateDialog.checkAndShow(context, forceCheck: true).ignore();
       }
       return;
     }
@@ -84,7 +82,7 @@ class PushNotificationService {
       return;
     }
 
-    if (_isOfficialUpdateUri(uri)) {
+    if (_isOfficialHttpsUri(uri)) {
       launchUrl(uri, mode: LaunchMode.externalApplication).ignore();
     } else {
       debugPrint('[PushNotif] blocked untrusted notification URL.');
@@ -119,24 +117,14 @@ class PushNotificationService {
   Future<void> showUpdateNotification({
     required String version,
     required String releaseNotes,
-    required String downloadUrl,
   }) async {
     if (!_initialized) await init();
 
-    final uri = Uri.tryParse(downloadUrl);
-    final safeUrl = _isOfficialUpdateUri(uri) ? uri!.toString() : '';
-    if (downloadUrl.isNotEmpty && safeUrl.isEmpty) {
-      debugPrint('[PushNotif] rejected untrusted update destination.');
-    }
-
-    // Keep the Android shade concise. Detailed release notes belong in the
-    // update dialog / What's New / official download page, not in a system
-    // notification where Markdown becomes noisy raw text.
     final hasReleaseNotes = releaseNotes.trim().isNotEmpty;
     final title = 'Otya $version is ready';
     final body = hasReleaseNotes
-        ? 'New features and improvements are ready. Tap to see what’s new.'
-        : 'A new Otya version is ready. Tap to update.';
+        ? 'New features and improvements are ready. Tap to update in Otya.'
+        : 'A new Otya version is ready. Tap to update in Otya.';
 
     final androidDetails = AndroidNotificationDetails(
       _chUpdates,
@@ -157,7 +145,7 @@ class PushNotificationService {
       title,
       body,
       NotificationDetails(android: androidDetails),
-      payload: safeUrl.isNotEmpty ? '$_prefixUpdate$safeUrl' : null,
+      payload: _nativeUpdatePayload,
     );
     debugPrint('[PushNotif] showUpdateNotification v$version');
   }
@@ -189,7 +177,5 @@ class PushNotificationService {
     debugPrint('[PushNotif] showAnnouncement: $title');
   }
 
-  /// Compatibility cleanup for older callers. Otya no longer owns an in-app
-  /// update download progress notification.
   Future<void> dismissDownload() async {}
 }

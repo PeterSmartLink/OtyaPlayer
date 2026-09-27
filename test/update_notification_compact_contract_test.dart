@@ -11,7 +11,7 @@ void main() {
     expect(source, contains("final title = 'Otya \$version is ready';"));
     expect(
       source,
-      contains('New features and improvements are ready. Tap to see what’s new.'),
+      contains('New features and improvements are ready. Tap to update in Otya.'),
     );
     expect(source, contains("summaryText: 'Official Otya update'"));
 

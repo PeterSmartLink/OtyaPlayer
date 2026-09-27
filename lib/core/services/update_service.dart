@@ -20,7 +20,7 @@ enum UpdateCheckState {
 
 /// Checks the canonical public Otya release authority.
 ///
-/// A direct PeterSmart Link APK may offer the PeterSmart Link release page.
+/// Direct PeterSmart Link builds update from one immutable ABI-specific APK.
 /// Google Play builds never sideload from that channel. Release truth comes
 /// from /latest and is accepted only when the server marks it published and
 /// its immutable tag, public version and build number agree.
@@ -42,7 +42,6 @@ class UpdateService {
 
   UpdateCheckState get lastState => _lastState;
   String? get lastError => _lastError;
-  String get downloadUrl => Environment.downloadPageUrl;
 
   Future<UpdateInfo?> checkForUpdate({bool force = false}) async {
     final existing = _checkInFlight;
@@ -73,9 +72,6 @@ class UpdateService {
 
   Future<UpdateInfo?> _doCheckForUpdate({bool force = false}) async {
     try {
-      // Google Play owns updates for Play-distributed builds. Do not point a
-      // Play build at a direct APK channel merely because the server has a
-      // newer PeterSmart Link build.
       if (!Environment.selfUpdateEnabled) {
         _lastState = UpdateCheckState.skipped;
         _lastError = 'Updates for this build are managed by Google Play.';
@@ -160,21 +156,19 @@ class UpdateService {
         return null;
       }
 
-      // Self-update must bind the installed APK to the exact immutable release
-      // identity returned by /latest. Mutable "latest" aliases are useful for
-      // browsers but are not accepted as the binary authority inside the app.
+      // The in-app updater accepts only the exact immutable APK for this ABI.
+      // Human-facing download pages and mutable aliases are deliberately not
+      // part of the app update contract and can never become a fallback.
       final exactKey = abi == 'arm64' ? 'exactArm64' : 'exactArm32';
       final directUrl = _officialExactApk(
         downloads[exactKey],
         abi: abi,
         tag: tag,
       );
-      final pageUrl = _officialHttps(downloads['auto']) ??
-          _officialHttps(Environment.downloadPageUrl);
-      if (directUrl == null || pageUrl == null) {
+      if (directUrl == null) {
         _lastState = UpdateCheckState.unavailable;
         _lastError =
-            'Published release does not contain a verified immutable Otya download destination.';
+            'Published release does not contain a verified immutable Otya APK.';
         return null;
       }
 
@@ -198,7 +192,6 @@ class UpdateService {
         versionCode: serverVersionCode,
         installedCode: installedCode,
         changelog: data['changelog'] as String? ?? '',
-        downloadUrl: pageUrl,
         directUrl: directUrl,
         releaseDate: data['date'] as String? ?? '',
       );
@@ -248,7 +241,6 @@ class UpdateService {
     await PushNotificationService.instance.showUpdateNotification(
       version: info.version,
       releaseNotes: info.changelog,
-      downloadUrl: info.downloadUrl,
     );
   }
 
@@ -270,7 +262,6 @@ class UpdateInfo {
   final int versionCode;
   final int installedCode;
   final String changelog;
-  final String downloadUrl;
   final String directUrl;
   final String releaseDate;
 
@@ -280,7 +271,6 @@ class UpdateInfo {
     required this.versionCode,
     required this.installedCode,
     required this.changelog,
-    required this.downloadUrl,
     required this.directUrl,
     required this.releaseDate,
   });
