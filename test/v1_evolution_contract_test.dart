@@ -19,8 +19,8 @@ void main() {
     expect(testWorkflow, isNot(contains('--no-fatal-infos')));
     expect(directRelease, contains('run: flutter analyze'));
     expect(directRelease, isNot(contains('--no-fatal-infos')));
-    expect(testWorkflow, contains('actions/checkout@v6'));
-    expect(directRelease, contains('actions/checkout@v6'));
+    expect(testWorkflow, contains('actions/checkout@v7'));
+    expect(directRelease, contains('actions/checkout@v7'));
   });
 
   test('test APK verification uses the Android signing verifier', () {
@@ -47,7 +47,7 @@ void main() {
     expect(release, contains(r'test "$APP_VERSION" = "${RELEASE_TAG#v}"'));
     expect(release, contains('does not exactly match pubspec version'));
     expect(release, isNot(contains('git tag -f')));
-    expect(release, contains('actions/checkout@v6'));
+    expect(release, contains('actions/checkout@v7'));
   });
 
   test('retired Online Music cannot return as a release dependency', () {
