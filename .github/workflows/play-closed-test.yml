@@ -186,7 +186,7 @@ jobs:
           sha256sum "$AAB" | tee "$CHECKSUM"
 
       - name: Save Play closed-test bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Otya-Play-closed-test
           if-no-files-found: error

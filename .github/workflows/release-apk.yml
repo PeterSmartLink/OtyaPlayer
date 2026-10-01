@@ -180,7 +180,7 @@ jobs:
           cp "$APK" build/Otya-arm64-release.apk
 
       - name: Upload signed release APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: otya-arm64-release-apk
           if-no-files-found: error
